@@ -1,0 +1,16 @@
+{% extends "tarsheeh/base.html" %}
+{% block title %}إدخال فردي{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="font-weight:900; margin-bottom:10px">إضافة مرشح + طلب</div>
+  <form method="post">
+    {% csrf_token %}
+    <div style="font-weight:800; margin:10px 0">بيانات المرشح</div>
+    {{ cand_form.as_p }}
+    <div style="font-weight:800; margin:10px 0">بيانات الطلب</div>
+    {{ app_form.as_p }}
+    <button class="btn primary" type="submit">إضافة</button>
+  </form>
+  <div class="mut" style="margin-top:10px">الدرجات تدخلها من شاشة المدخلات.</div>
+</div>
+{% endblock %}

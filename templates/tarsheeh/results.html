@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>النتائج</title>
+</head>
+<body style="font-family:system-ui; padding:24px">
+  <h2>نتائج الدفعة: {{ batch }}</h2>
+  <p>المستوفون: {{ eligible_count }} | غير المستوفين: {{ ineligible_count }}</p>
+
+  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse; width:100%; font-size:14px">
+    <thead>
+      <tr>
+        <th>الاسم</th>
+        <th>السجل</th>
+        <th>العمل الحالي</th>
+        <th>سنوات وكيل</th>
+        <th>سنوات مدير</th>
+        <th>درجة الملف</th>
+        <th>درجة المقابلة</th>
+        <th>المجموع</th>
+        <th>الحالة</th>
+        <th>السبب</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in rows %}
+      <tr>
+        <td>{{ a.candidate.full_name }}</td>
+        <td>{{ a.candidate.national_id }}</td>
+        <td>{{ a.candidate.current_job }}</td>
+        <td>{{ a.candidate.years_deputy }}</td>
+        <td>{{ a.candidate.years_director }}</td>
+        <td>{{ a.file_score }}</td>
+        <td>{{ a.interview_score }}</td>
+        <td><b>{{ a.total_score }}</b></td>
+        <td>{% if a.is_eligible %}✅ مستوفي{% else %}❌ غير مستوفي{% endif %}</td>
+        <td>{{ a.ineligible_reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p style="margin-top:18px">
+    <a href="{% url 'tarsheeh:upload' %}">رفع ملف جديد</a>
+  </p>
+</body>
+</html>

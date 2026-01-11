@@ -1,0 +1,84 @@
+{% extends "tarsheeh/base.html" %}
+{% block title %}شاشة العمليات{% endblock %}
+{% block content %}
+<div class="grid">
+  <div class="cards">
+    <div class="card"><div class="k">المعروض</div><div class="v">{{ kpi.count }}</div></div>
+    <div class="card"><div class="k">مستوفون</div><div class="v">{{ kpi.eligible }}</div></div>
+    <div class="card"><div class="k">نواقص</div><div class="v">{{ kpi.pending }}</div></div>
+    <div class="card"><div class="k">المدخلات</div><div class="v">
+      <a class="btn primary" href="{% url 'tarsheeh:scores' %}?batch={{ filters.batch }}&opp={{ filters.opp }}">فتح</a>
+    </div></div>
+    <div class="card"><div class="k">إضافة</div><div class="v"><a class="btn" href="{% url 'tarsheeh:add_manual' %}">فردي</a></div></div>
+    <div class="card"><div class="k">إضافة</div><div class="v"><a class="btn" href="{% url 'tarsheeh:paste_import' %}">لصق</a></div></div>
+  </div>
+
+  <div class="card">
+    <form method="get" class="row">
+      <select name="batch">
+        <option value="">كل الدفعات</option>
+        {% for b in batches %}
+          <option value="{{ b.id }}" {% if filters.batch == b.id|stringformat:"s" %}selected{% endif %}>{{ b.title }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="opp">
+        <option value="">كل المدارس</option>
+        {% for o in opps %}
+          <option value="{{ o.id }}" {% if filters.opp == o.id|stringformat:"s" %}selected{% endif %}>{{ o.name }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="role">
+        <option value="">كل الوظائف</option>
+        <option value="مدير" {% if filters.role == "مدير" %}selected{% endif %}>مدير</option>
+        <option value="وكيل" {% if filters.role == "وكيل" %}selected{% endif %}>وكيل</option>
+        <option value="أخرى" {% if filters.role == "أخرى" %}selected{% endif %}>أخرى</option>
+      </select>
+
+      <select name="eligible">
+        <option value="">الكل</option>
+        <option value="1" {% if filters.eligible == "1" %}selected{% endif %}>مستوفي</option>
+        <option value="0" {% if filters.eligible == "0" %}selected{% endif %}>غير مستوفي</option>
+      </select>
+
+      <input name="q" value="{{ filters.q }}" placeholder="بحث: اسم/سجل/مدرسة المتقدم">
+      <button class="btn primary" type="submit">تطبيق</button>
+      <a class="btn" href="{% url 'tarsheeh:applications' %}">مسح</a>
+    </form>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>المرشح</th>
+        <th>السجل</th>
+        <th>المدرسة/الفرصة</th>
+        <th>الوظيفة</th>
+        <th>درجة الملف</th>
+        <th>درجة المقابلة</th>
+        <th>المجموع</th>
+        <th>الحالة</th>
+        <th>سبب</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in rows %}
+      <tr>
+        <td>{{ a.candidate.full_name }}</td>
+        <td class="mut">{{ a.candidate.national_id }}</td>
+        <td>{{ a.opportunity.name }}</td>
+        <td><span class="tag">{{ a.applied_role }}</span></td>
+        <td>{{ a.file_score }}</td>
+        <td>{{ a.interview_score }}</td>
+        <td><b>{{ a.total_score }}</b></td>
+        <td>{% if a.is_eligible %}<span class="ok">مستوفي</span>{% else %}<span class="bad">غير مستوفي</span>{% endif %}</td>
+        <td class="mut">{{ a.ineligible_reason }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9" class="mut">لا توجد بيانات</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

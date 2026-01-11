@@ -1,0 +1,40 @@
+{% extends "tarsheeh/base.html" %}
+{% block title %}لوحة العمليات{% endblock %}
+{% block content %}
+<div class="grid">
+  <div class="cards">
+    <div class="card"><div class="k">الدفعات</div><div class="v">{{ stats.batches }}</div></div>
+    <div class="card"><div class="k">الفرص/المدارس</div><div class="v">{{ stats.opps }}</div></div>
+    <div class="card"><div class="k">المرشحين</div><div class="v">{{ stats.candidates }}</div></div>
+    <div class="card"><div class="k">الطلبات</div><div class="v">{{ stats.apps }}</div></div>
+    <div class="card"><div class="k">مستوفون</div><div class="v">{{ stats.eligible }}</div></div>
+    <div class="card"><div class="k">نواقص درجات</div><div class="v">{{ stats.pending_scores }}</div></div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900; margin-bottom:8px">اختصارات</div>
+    <div class="row">
+      <a class="btn" href="{% url 'tarsheeh:applications' %}">فتح شاشة العمليات</a>
+      <a class="btn primary" href="{% url 'tarsheeh:scores' %}?pending=1">فتح النواقص فقط</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900; margin-bottom:8px">آخر الدفعات</div>
+    <div class="row">
+      {% for b in batches %}
+        <a class="btn" href="{% url 'tarsheeh:applications' %}?batch={{ b.id }}">{{ b.title }}</a>
+      {% empty %}<span class="mut">لا توجد دفعات</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900; margin-bottom:8px">آخر المدارس/الفرص</div>
+    <div class="row">
+      {% for o in opps %}
+        <a class="btn" href="{% url 'tarsheeh:applications' %}?opp={{ o.id }}">{{ o.name }}</a>
+      {% empty %}<span class="mut">لا توجد فرص</span>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

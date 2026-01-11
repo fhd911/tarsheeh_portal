@@ -1,0 +1,261 @@
+{% extends "tarsheeh/base.html" %}
+{% block title %}لصق من Excel{% endblock %}
+
+{% block content %}
+<div class="grid">
+
+  <!-- =========================
+       Header / Guidance
+       ========================= -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:900; font-size:16px;">لصق بيانات المرشحين من Excel</div>
+        <div class="mut" style="margin-top:4px;">
+          الصق البيانات <b>بنفس ترتيب الأعمدة</b> الموضح أدناه (الأفضل: نسخ الصفوف من Excel ولصقها مباشرة).
+        </div>
+      </div>
+      <div class="row" style="gap:8px;">
+        <button id="copyHeadersBtn" type="button" class="btn">نسخ العناوين</button>
+        <button id="copyExampleBtn" type="button" class="btn">نسخ مثال صف</button>
+      </div>
+    </div>
+
+    <div style="margin-top:10px">
+      <span class="tag">التشكيلات المدرسية (مدير/وكيل)</span>
+    </div>
+  </div>
+
+  <!-- =========================
+       Required Headers
+       ========================= -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div style="font-weight:900;">العناوين المطلوبة (بالترتيب)</div>
+      <div class="mut">يمكنك نسخ العناوين بزر “نسخ العناوين”.</div>
+    </div>
+
+    <div style="margin-top:10px; overflow:auto; border:1px solid #e5e7eb; border-radius:10px;">
+      <table style="min-width:1400px; margin:0;">
+        <thead>
+          <tr>
+            <th>اسم المتقدم</th>
+            <th>السجل المدني</th>
+            <th>رقم الجوال</th>
+            <th>التخصص</th>
+            <th>الرتبة</th>
+            <th>العمل الحالي</th>
+            <th>تاريخ المباشرة (هجري)</th>
+            <th>مدرسة المتقدم</th>
+            <th>قطاع المتقدم</th>
+            <th>الوظيفة المتقدم عليها</th>
+            <th>الفرصة</th>
+            <th>قطاع الفرصة</th>
+            <th>سبق العمل في الإدارة المدرسية</th>
+            <th>سنوات عمل مدير</th>
+            <th>سنوات عمل وكيل</th>
+            <th>درجة الملف</th>
+            <th>درجة المقابلة</th>
+            <th>المجموع الكلي</th>
+          </tr>
+        </thead>
+      </table>
+    </div>
+
+    <div class="mut" style="margin-top:8px;">
+      ملاحظة: في الموقع سيتم حساب <b>المجموع</b> تلقائيًا من (درجة الملف + درجة المقابلة)، حتى لو كان عمود المجموع موجودًا بالملف.
+    </div>
+  </div>
+
+  <!-- =========================
+       Import Form
+       ========================= -->
+  <div class="card">
+    <div style="font-weight:900; margin-bottom:8px;">إعدادات الاستيراد</div>
+
+    <form method="post" class="grid" style="gap:12px;">
+      {% csrf_token %}
+
+      <!-- toggles -->
+      <div class="row" style="gap:14px; align-items:center; flex-wrap:wrap;">
+        <label class="row" style="gap:6px; align-items:center;">
+          <input id="multiOppToggle" type="checkbox">
+          استيراد متعدد المدارس (من داخل البيانات)
+        </label>
+
+        <label class="row" style="gap:6px; align-items:center;">
+          <input id="roleFromDataToggle" type="checkbox" checked>
+          قراءة الوظيفة من داخل البيانات (العمود: الوظيفة المتقدم عليها)
+        </label>
+      </div>
+
+      <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+        <select name="batch" required>
+          <option value="">اختر الدفعة *</option>
+          {% for b in batches %}
+            <option value="{{ b.id }}">{{ b.title }}</option>
+          {% endfor %}
+        </select>
+
+        <!-- Opportunity (optional when multi school) -->
+        <div id="oppWrap" class="row" style="gap:8px; align-items:center;">
+          <select name="opp">
+            <option value="">(اختياري) اختر المدرسة/الفرصة</option>
+            {% for o in opps %}
+              <option value="{{ o.id }}">{{ o.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="mut" style="font-size:12px;">اتركه فارغًا مع تفعيل "متعدد المدارس".</span>
+        </div>
+
+        <!-- Role (optional when role from data) -->
+        <div id="roleWrap" class="row" style="gap:8px; align-items:center;">
+          <select name="role">
+            <option value="">(اختياري) اختر الوظيفة</option>
+            <option value="مدير">مدير</option>
+            <option value="وكيل">وكيل</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+          <span class="mut" style="font-size:12px;">اتركه فارغًا مع تفعيل "قراءة الوظيفة من البيانات".</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="mut" style="margin-bottom:6px;">الصق البيانات هنا (Rows)</div>
+        <textarea
+          id="pasteBox"
+          name="paste"
+          rows="10"
+          placeholder="الصق الصفوف هنا... (Tab بين الأعمدة)"
+          style="width:100%; min-height:220px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"
+          required
+        ></textarea>
+
+        <div class="mut" style="margin-top:6px;">
+          تلميح: إذا كان الاستيراد متعدد المدارس لازم تحتوي البيانات على عمود:
+          <b>الفرصة</b> و <b>قطاع الفرصة</b> لكل صف.
+        </div>
+      </div>
+
+      <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn primary" type="submit">استيراد</button>
+        <button id="clearBtn" class="btn" type="button">مسح</button>
+        <div class="mut" id="rowsInfo" style="margin-inline-start:auto;"></div>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script>
+  // =========================
+  // Headers + Example
+  // =========================
+  const headers = [
+    "اسم المتقدم",
+    "السجل المدني",
+    "رقم الجوال",
+    "التخصص",
+    "الرتبة",
+    "العمل الحالي",
+    "تاريخ المباشرة (هجري)",
+    "مدرسة المتقدم",
+    "قطاع المتقدم",
+    "الوظيفة المتقدم عليها",
+    "الفرصة",
+    "قطاع الفرصة",
+    "سبق العمل في الإدارة المدرسية",
+    "سنوات عمل مدير",
+    "سنوات عمل وكيل",
+    "درجة الملف",
+    "درجة المقابلة",
+    "المجموع الكلي"
+  ];
+
+  const exampleRow = [
+    "محمد أحمد",
+    "1234567890",
+    "0550000000",
+    "رياضيات",
+    "معلم خبير",
+    "مدرسة المتقدم",
+    "01/05/1445",
+    "مدرسة المتقدم",
+    "قطاع المتقدم",
+    "وكيل",
+    "مدرسة تجريبية",
+    "قطاع تجريبي",
+    "نعم",
+    "0",
+    "3",
+    "30",
+    "20",
+    "50"
+  ];
+
+  function copyText(txt){
+    navigator.clipboard.writeText(txt);
+  }
+
+  document.getElementById("copyHeadersBtn")?.addEventListener("click", () => {
+    copyText(headers.join("\t"));
+  });
+
+  document.getElementById("copyExampleBtn")?.addEventListener("click", () => {
+    copyText(exampleRow.join("\t"));
+  });
+
+  // =========================
+  // Paste box helpers
+  // =========================
+  const box = document.getElementById("pasteBox");
+  const rowsInfo = document.getElementById("rowsInfo");
+
+  function updateRowsInfo(){
+    if(!box || !rowsInfo) return;
+    const text = box.value.trim();
+    if(!text){ rowsInfo.textContent = ""; return; }
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+    rowsInfo.textContent = `عدد الصفوف: ${lines.length}`;
+  }
+  box?.addEventListener("input", updateRowsInfo);
+  updateRowsInfo();
+
+  document.getElementById("clearBtn")?.addEventListener("click", () => {
+    if(!box) return;
+    box.value = "";
+    updateRowsInfo();
+    box.focus();
+  });
+
+  // =========================
+  // Toggles behavior
+  // =========================
+  const multiOppToggle = document.getElementById("multiOppToggle");
+  const roleFromDataToggle = document.getElementById("roleFromDataToggle");
+
+  const oppWrap = document.getElementById("oppWrap");
+  const roleWrap = document.getElementById("roleWrap");
+
+  function syncToggles(){
+    // Multi opp => hide opp selector (optional)
+    if(multiOppToggle?.checked){
+      oppWrap.style.display = "none";
+      // remove required behavior implicitly (select has no required anyway)
+    }else{
+      oppWrap.style.display = "";
+    }
+
+    // role from data => hide role selector (optional)
+    if(roleFromDataToggle?.checked){
+      roleWrap.style.display = "none";
+    }else{
+      roleWrap.style.display = "";
+    }
+  }
+
+  multiOppToggle?.addEventListener("change", syncToggles);
+  roleFromDataToggle?.addEventListener("change", syncToggles);
+  syncToggles();
+</script>
+{% endblock %}
