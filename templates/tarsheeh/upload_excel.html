@@ -1,0 +1,34 @@
+{% extends "tarsheeh/base.html" %}
+{% block title %}رفع ملف Excel{% endblock %}
+{% block content %}
+
+<div class="grid">
+  <div class="card">
+    <div style="font-weight:900; font-size:16px;">رفع ملف Excel (.xlsx)</div>
+    <div class="mut" style="margin-top:6px;">
+      يدعم قراءة عناوين الأعمدة العربية مثل: اسم المتقدم، السجل المدني، رقم الجوال، سنوات عمل مدير، سنوات عمل وكيل، درجة الملف، درجة المقابلة...
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="post" enctype="multipart/form-data" class="grid" style="gap:12px;">
+      {% csrf_token %}
+      {{ form.as_p }}
+
+      <div class="row" style="gap:10px;">
+        <button class="btn primary" type="submit">استيراد الملف</button>
+        <a class="btn" href="{% url 'tarsheeh:dashboard' %}">رجوع</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900; margin-bottom:8px;">العناوين التي يتعرف عليها النظام</div>
+    <div class="mut" style="line-height:1.9">
+      اسم المتقدم، السجل المدني، رقم الجوال، العمل الحالي، سنوات عمل مدير، سنوات عمل وكيل، مدرسة المتقدم، قطاع المتقدم،
+      الوظيفة المتقدم عليها، درجة الملف، درجة المقابلة، الفرصة، قطاع الفرصة.
+    </div>
+  </div>
+</div>
+
+{% endblock %}

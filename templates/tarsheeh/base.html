@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -5,171 +6,211 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}بوابة الترشيح{% endblock %}</title>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <style>
     :root{
       --bg:#f6f8fc;
-      --card:#fff;
-      --line:#e6edf5;
-      --txt:#0f172a;
-      --mut:#64748b;
+      --txt:#0b1220;
+      --mut:#607089;
 
-      --brand:#0ea5a4;
-      --ok:#16a34a;
-      --bad:#ef4444;
+      /* Excel-ish */
+      --xl-grid:#d9d9d9;
+      --xl-head:#f3f3f3;
+      --xl-green:#107c41;
+      --xl-blue:#1f6feb;
+
+      --ff:"Cairo","Tajawal",system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;
+
+      /* Typography baseline (Excel-like) */
+      --fs:12px;
+      --fs2:11px;
+      --fw:500;
+      --fw2:600;
+      --fw3:700;
 
       --r:12px;
-      --ff: system-ui, "Cairo","Tajawal", Arial;
     }
 
-    body{ margin:0; font-family:var(--ff); background:var(--bg); color:var(--txt); }
-    a{ color:inherit; }
-
-    .wrap{ max-width:1150px; margin:0 auto; padding:16px; }
-    .top{
-      background:#fff;
-      border-bottom:1px solid var(--line);
-      position:sticky; top:0; z-index:5;
+    *{ box-sizing:border-box; }
+    html,body{ overflow-x:hidden; }
+    body{
+      margin:0;
+      font-family:var(--ff);
+      background:var(--bg);
+      color:var(--txt);
+      font-size:var(--fs);
+      font-weight:var(--fw);
+      line-height:1.35;
+      text-rendering:optimizeLegibility;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
     }
 
-    .nav{
-      display:flex; gap:12px;
-      align-items:center; justify-content:space-between;
+    /* Reset: لا نخلي شيء يصير Bold بالخطأ */
+    h1,h2,h3,h4,h5,h6{ margin:0; font-weight:var(--fw3); }
+    b,strong{ font-weight:var(--fw3); }
+    a{ color:inherit; text-decoration:none; }
+
+    .wrap{
+      max-width:1220px;
+      margin:0 auto;
       padding:12px 16px;
+    }
+
+    /* Topbar */
+    .topbar{
+      position:sticky; top:0; z-index:50;
+      background:#fff;
+      border-bottom:1px solid var(--xl-grid);
+    }
+    .topbar .wrap{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
       flex-wrap:wrap;
     }
 
-    .brand{
-      display:flex; flex-direction:column; gap:4px;
-      min-width:240px;
+    .brandline{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      min-width: 220px;
     }
 
-    .brand .title{
-      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-      font-weight:900; text-decoration:none;
-      line-height:1.1;
+    .title{
+      margin:0;
+      font-size:14px;
+      font-weight:var(--fw3);
+      letter-spacing:.2px;
     }
 
-    .brand .sub{
+    .crumb{
       color:var(--mut);
-      font-size:12px;
-      line-height:1.2;
-      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+      font-size:var(--fs2);
+      font-weight:var(--fw2);
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
     }
 
-    .pill{
-      display:inline-flex; align-items:center;
-      padding:3px 10px;
-      border-radius:999px;
-      font-size:12px;
-      border:1px solid var(--line);
+    .actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:flex-start;
+      max-width:100%;
+    }
+
+    /* Excel-like buttons (أصغر + وزن أخف) */
+    .btn{
+      height:32px;
+      padding:0 10px;
+      border:1px solid var(--xl-grid);
+      border-radius:8px;
       background:#fff;
-      color:var(--txt);
+      font-size:11.5px;
+      font-weight:var(--fw2);
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      user-select:none;
       white-space:nowrap;
     }
-    .pill.soft{ background:#f8fafc; }
-
-    .btn{
-      display:inline-flex; align-items:center; justify-content:center;
-      padding:9px 12px;
-      border-radius:10px;
-      border:1px solid var(--line);
-      background:#fff;
-      text-decoration:none;
-      gap:8px;
-    }
-    .btn.primary{ background:var(--brand); border-color:var(--brand); color:#fff; }
-
-    .grid{ display:grid; gap:12px; }
-    .cards{ display:grid; gap:10px; grid-template-columns:repeat(6,1fr); }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:12px; }
-
-    .k{ color:var(--mut); font-size:12px; }
-    .v{ font-size:18px; font-weight:900; margin-top:4px; }
-
-    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    input, select, textarea{
-      padding:10px;
-      border:1px solid var(--line);
-      border-radius:10px;
-      font-family:var(--ff);
-      background:#fff;
+    .btn:hover{
+      border-color:#c9c9c9;
+      background:#fafafa;
     }
 
-    table{
-      width:100%;
-      border-collapse:collapse;
-      background:#fff;
-      border:1px solid var(--line);
-      border-radius:12px;
-      overflow:hidden;
+    .btn.primary{
+      border-color: rgba(31,111,235,.25);
+      background: rgba(31,111,235,.08);
     }
-    th, td{ padding:10px; border-bottom:1px solid var(--line); text-align:right; font-size:13px; }
-    th{ background:#f1f5f9; font-weight:900; }
+    .btn.solid{
+      border-color: rgba(16,124,65,.25);
+      background: var(--xl-green);
+      color:#fff;
+      font-weight:var(--fw3);
+    }
+    .btn.solid:hover{ filter: brightness(1.03); }
 
-    .tag{ padding:3px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); background:#fff; }
-    .ok{ color:var(--ok); font-weight:900; }
-    .bad{ color:var(--bad); font-weight:900; }
-    .mut{ color:var(--mut); }
+    .sep{
+      width:1px;
+      height:18px;
+      background: var(--xl-grid);
+      display:inline-block;
+      margin:0 2px;
+    }
 
+    /* Messages */
+    .msgs{ margin:12px 0 0; display:grid; gap:10px; }
     .msg{
       background:#fff;
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:10px;
-      margin:10px 0;
+      border:1px solid var(--xl-grid);
+      border-radius:10px;
+      padding:10px 12px;
+      font-size:12px;
+      font-weight:var(--fw2);
     }
 
-    @media (max-width:900px){
-      .cards{ grid-template-columns:repeat(2,1fr); }
-      .brand{ min-width:auto; }
-    }
+    .page{ margin-top:12px; }
+
+    /* Helpers (مفيد للصفحات) */
+    .mut{ color:var(--mut); }
   </style>
+
+  {% block extra_css %}{% endblock %}
 </head>
 
 <body>
+  <div class="topbar">
+    <div class="wrap">
+      <div class="brandline">
+        <h1 class="title">{% block page_title %}بوابة الترشيح{% endblock %}</h1>
+        <div class="crumb">
+          {% block breadcrumb %}<span>لوحة التحكم</span>{% endblock %}
+        </div>
+      </div>
 
-<div class="top">
-  <div class="nav">
+      <div class="actions">
+        {# ✅ أزرار الصفحة نفسها (بدون تكرار) #}
+        {% block top_actions %}{% endblock %}
 
-    <!-- Brand + subtitle -->
-    <div class="brand">
-      <a href="{% url 'tarsheeh:dashboard' %}" class="title">
-        بوابة الترشيح
-        <span class="pill soft">التشكيلات المدرسية (مدير/وكيل)</span>
-      </a>
+        <span class="sep"></span>
 
-      <div class="sub">
-        <!-- ✅ هنا لا نستخدم block title إطلاقًا -->
-        <span class="pill">الصفحة: {% block page_name %}لوحة التحكم{% endblock %}</span>
+        {# ✅ تنقّل ثابت #}
+        <a class="btn primary" href="{% url 'tarsheeh:dashboard' %}">لوحة التحكم</a>
+        <a class="btn" href="{% url 'tarsheeh:applications' %}">الطلبات</a>
+        <a class="btn" href="{% url 'tarsheeh:scores' %}">الدرجات</a>
+
+        <span class="sep"></span>
+
+        {# ✅ إعدادات/إضافة أساسية #}
+        <a class="btn" href="{% url 'tarsheeh:create_batch' %}">+ دفعة</a>
+        <a class="btn" href="{% url 'tarsheeh:create_opportunity' %}">+ مدرسة/فرصة</a>
       </div>
     </div>
-
-    <!-- Main screens -->
-    <div class="row">
-      <a class="btn" href="{% url 'tarsheeh:applications' %}">شاشة العمليات</a>
-      <a class="btn" href="{% url 'tarsheeh:scores' %}">شاشة المدخلات</a>
-    </div>
-
-    <!-- Actions -->
-    <div class="row">
-      <a class="btn" href="{% url 'tarsheeh:create_batch' %}">+ دفعة</a>
-      <a class="btn" href="{% url 'tarsheeh:create_opportunity' %}">+ مدرسة/فرصة</a>
-      <a class="btn primary" href="{% url 'tarsheeh:add_manual' %}">+ إدخال فردي</a>
-      <a class="btn" href="{% url 'tarsheeh:paste_import' %}">لصق من Excel</a>
-    </div>
-
   </div>
-</div>
 
-<div class="wrap">
-  {% if messages %}
-    {% for m in messages %}
-      <div class="msg">{{ m }}</div>
-    {% endfor %}
-  {% endif %}
+  <div class="wrap">
+    {% if messages %}
+      <div class="msgs">
+        {% for message in messages %}
+          <div class="msg {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
-  {% block content %}{% endblock %}
-</div>
+    <div class="page">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
 
+  {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -43,7 +43,7 @@ class ApplicationCreateForm(forms.ModelForm):
 
 
 # ======================================================
-# Paste Import (Excel)
+# Paste Import (Excel Copy/Paste)
 # - opportunity OPTIONAL to allow multi-school paste
 # - applied_role OPTIONAL to read per-row role (column 10)
 # ======================================================
@@ -65,7 +65,14 @@ class PasteImportForm(forms.Form):
 
     applied_role = forms.ChoiceField(
         label="الوظيفة (اختياري)",
-        choices=[("", "حسب العمود داخل البيانات")] + list(getattr(Application, "ROLE_CHOICES", [("مدير", "مدير"), ("وكيل", "وكيل"), ("أخرى", "أخرى")])),
+        choices=[("", "حسب العمود داخل البيانات")]
+        + list(
+            getattr(
+                Application,
+                "ROLE_CHOICES",
+                [("مدير", "مدير"), ("وكيل", "وكيل"), ("أخرى", "أخرى")],
+            )
+        ),
         required=False,
         initial="",
         help_text="إذا تركتها فارغة سيُؤخذ الدور من عمود (الوظيفة المتقدم عليها).",
@@ -85,4 +92,55 @@ class PasteImportForm(forms.Form):
                 ),
             }
         ),
+    )
+
+
+# ======================================================
+# Upload Excel (.xlsx) Import
+# ======================================================
+
+class UploadExcelForm(forms.Form):
+    batch = forms.ModelChoiceField(
+        label="الدفعة",
+        queryset=Batch.objects.order_by("-created_at"),
+        required=True,
+        empty_label=None,
+    )
+
+    file = forms.FileField(
+        label="ملف Excel (.xlsx)",
+        required=True,
+        help_text="ارفع ملف .xlsx (يفضل أن يحتوي صف العناوين).",
+    )
+
+    multi_school = forms.BooleanField(
+        label="استيراد متعدد المدارس (من داخل الملف)",
+        required=False,
+        initial=False,
+        help_text="إذا مفعل: سيتم قراءة (الفرصة + قطاع الفرصة) من كل صف.",
+    )
+
+    read_role_from_data = forms.BooleanField(
+        label="قراءة الوظيفة من داخل البيانات (الوظيفة المتقدم عليها)",
+        required=False,
+        initial=True,
+    )
+
+    applied_role = forms.ChoiceField(
+        label="الوظيفة الافتراضية (إذا لم توجد بالملف)",
+        choices=list(
+            getattr(
+                Application,
+                "ROLE_CHOICES",
+                [("مدير", "مدير"), ("وكيل", "وكيل"), ("أخرى", "أخرى")],
+            )
+        ),
+        initial="مدير",
+        required=False,
+    )
+
+    opportunity = forms.ModelChoiceField(
+        label="المدرسة/الفرصة (إذا لم تفعل متعدد المدارس)",
+        queryset=Opportunity.objects.order_by("-created_at"),
+        required=False,
     )

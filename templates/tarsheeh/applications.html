@@ -1,84 +1,1505 @@
+{# templates/tarsheeh/applications.html #}
 {% extends "tarsheeh/base.html" %}
-{% block title %}شاشة العمليات{% endblock %}
+
+{% block title %}قائمة المتقدمين{% endblock %}
+{% block page_title %}قائمة المتقدمين{% endblock %}
+{% block breadcrumb %}<span>لوحة التحكم</span> <span>—</span> <span>قائمة المتقدمين</span>{% endblock %}
+
+{% block top_actions %}
+  <a class="btn solid" href="{% url 'tarsheeh:add_manual' %}">+ إدخال فردي</a>
+  <a class="btn" href="{% url 'tarsheeh:paste_import' %}">لصق من Excel</a>
+  <a class="btn" href="{% url 'tarsheeh:upload_excel' %}">رفع ملف Excel</a>
+{% endblock %}
+
 {% block content %}
-<div class="grid">
-  <div class="cards">
-    <div class="card"><div class="k">المعروض</div><div class="v">{{ kpi.count }}</div></div>
-    <div class="card"><div class="k">مستوفون</div><div class="v">{{ kpi.eligible }}</div></div>
-    <div class="card"><div class="k">نواقص</div><div class="v">{{ kpi.pending }}</div></div>
-    <div class="card"><div class="k">المدخلات</div><div class="v">
-      <a class="btn primary" href="{% url 'tarsheeh:scores' %}?batch={{ filters.batch }}&opp={{ filters.opp }}">فتح</a>
-    </div></div>
-    <div class="card"><div class="k">إضافة</div><div class="v"><a class="btn" href="{% url 'tarsheeh:add_manual' %}">فردي</a></div></div>
-    <div class="card"><div class="k">إضافة</div><div class="v"><a class="btn" href="{% url 'tarsheeh:paste_import' %}">لصق</a></div></div>
+<style>
+  :root{
+    --grid:#d9d9d9;
+    --grid2:#ededed;
+    --head:#f3f3f3;
+    --letters:#fafafa;
+
+    --txt:#111827;
+    --mut:#6b7280;
+
+    --excel:#107c41;
+    --blue:#2563eb;
+    --bad:#b91c1c;
+
+    --r:12px;
+
+    /* Excel-ish typography (أخف) */
+    --fs:12px;
+    --fsHead:11px;
+    --fw:400;
+    --fwStrong:600;
+    --fwHead:600;
+
+    /* freeze widths */
+    --rowHdrW: 54px;
+    --colA: 240px; /* المرشح */
+    --colB: 120px; /* السجل */
+  }
+
+  html,body{ overflow-x:hidden; }
+  *{ box-sizing:border-box; }
+
+  .sheet{
+    background:#fff;
+    border:1px solid var(--grid);
+    border-radius:var(--r);
+    overflow:hidden;
+  }
+
+  /* ===== KPI row ===== */
+  .summary{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom:1px solid var(--grid);
+    background:#fff;
+  }
+  @media (max-width: 980px){ .summary{ grid-template-columns: repeat(2,1fr); } }
+  @media (max-width: 520px){ .summary{ grid-template-columns: 1fr; } }
+
+  .s-cell{
+    padding:10px 12px;
+    border-left:1px solid var(--grid);
+    min-height:54px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:3px;
+  }
+  .s-cell:first-child{ border-left:0; }
+  .s-k{ font-size:11px; font-weight:600; color:var(--mut); }
+  .s-v{ font-size:18px; font-weight:700; color:var(--txt); font-variant-numeric: tabular-nums; }
+
+  /* ===== Filters (server GET) ===== */
+  .filters{
+    padding:10px 12px;
+    border-bottom:1px solid var(--grid);
+    background:var(--head);
+  }
+  .fgrid{
+    display:grid;
+    grid-template-columns: 1.4fr repeat(4, 1fr) auto;
+    gap:8px;
+    align-items:end;
+  }
+  @media (max-width: 980px){ .fgrid{ grid-template-columns: 1fr 1fr; } }
+
+  .field label{
+    display:block;
+    font-size:11px;
+    font-weight:600;
+    color:var(--mut);
+    margin:0 0 6px;
+  }
+  .ctrl{
+    width:100%;
+    height:34px;
+    border:1px solid var(--grid);
+    border-radius:8px;
+    background:#fff;
+    padding:0 10px;
+    font-size:12px;
+    font-weight:500;
+    outline:none;
+  }
+  .ctrl:focus{
+    border-color: rgba(31,111,235,.55);
+    box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+  }
+
+  .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .btnx{
+    height:34px;
+    padding:0 12px;
+    border:1px solid var(--grid);
+    border-radius:8px;
+    background:#fff;
+    font-size:12px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btnx.primary{
+    background: var(--excel);
+    border-color: rgba(16,124,65,.25);
+    color:#fff;
+  }
+  .btnx:active{ transform: translateY(1px); }
+
+  /* ===== Table viewport ===== */
+  .table-viewport{ width:100%; overflow-x:hidden; background:#fff; }
+  .table-scroll{
+    max-height: 72vh;
+    overflow-y:auto;
+    overflow-x:hidden;
+
+    /* hide scrollbar (keep scrolling) */
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+  }
+  .table-scroll::-webkit-scrollbar{ width:0; height:0; }
+
+  table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    table-layout:fixed;
+  }
+
+  /* ===== Letters row ===== */
+  .xl-letters th{
+    position: sticky;
+    top:0;
+    z-index:9;
+    background:var(--letters);
+    border-bottom:1px solid var(--grid);
+    padding:6px 10px;
+    font-size:10px;
+    font-weight:600;
+    color:#6b7280;
+    text-align:center;
+    white-space:nowrap;
+    user-select:none;
+  }
+
+  /* ===== Header row ===== */
+  thead .hdr th{
+    position: sticky;
+    top: 28px;
+    z-index:8;
+    background: var(--head);
+    border-bottom:1px solid var(--grid);
+    padding:8px 10px;
+    font-size:var(--fsHead);
+    font-weight:var(--fwHead);
+    color:#374151;
+    text-align:right;
+    white-space:nowrap;
+    user-select:none;
+  }
+
+  td, th{ border-left:1px solid var(--grid2); }
+  td:first-child, th:first-child{ border-left:0; }
+
+  tbody td{
+    border-bottom:1px solid var(--grid2);
+    padding:7px 10px;
+    font-size:var(--fs);
+    font-weight:var(--fw);
+    color:var(--txt);
+    background:#fff;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    vertical-align:middle;
+    line-height:1.25;
+    user-select:none;
+  }
+
+  tbody tr:hover td{ background: rgba(31,111,235,.05); }
+
+  /* ===== Row/Col headers (numbers + corner) ===== */
+  .corner,
+  .rowhdr,
+  .rowhdr-h{
+    background:var(--letters);
+    color:#6b7280;
+    text-align:center !important;
+    font-size:10px !important;
+    font-weight:600 !important;
+    user-select:none;
+  }
+  .rowhdr{ font-variant-numeric: tabular-nums; }
+  .rowhdr-h{ background:var(--head); }
+
+  /* Freeze panes (RTL): row header + first two columns */
+  .freezeRow{
+    position:sticky;
+    right:0;
+    z-index:10;
+    background:var(--letters);
+  }
+  .freeze1{
+    position:sticky;
+    right: var(--rowHdrW);
+    z-index:7;
+    background:#fff;
+  }
+  .freeze2{
+    position:sticky;
+    right: calc(var(--rowHdrW) + var(--colA));
+    z-index:7;
+    background:#fff;
+  }
+
+  /* headers above frozen */
+  thead .freezeRow{ z-index:20; }
+  thead .freeze1, thead .freeze2{ z-index:19; background:var(--head); }
+  .xl-letters .freeze1, .xl-letters .freeze2{ z-index:21; background:var(--letters); }
+
+  /* Column widths (resizable + persisted) */
+  th.rn, td.rn{ width: var(--rowHdrW); }
+  th.c1, td.c1{ width: var(--colA); }
+  th.c2, td.c2{ width: var(--colB); }
+  th.c3, td.c3{ width:240px; }
+  th.c4, td.c4{ width:120px; }
+  th.c5, td.c5{ width:110px; }
+  th.c6, td.c6{ width:110px; }
+  th.c7, td.c7{ width:90px; }
+  th.c8, td.c8{ width:110px; }
+  th.c9, td.c9{ width:110px; }
+
+  .name{ font-weight:var(--fwStrong); font-size:12px; }
+  .sub{ margin-top:2px; color:var(--mut); font-weight:400; font-size:11px; }
+  .num{ font-variant-numeric: tabular-nums; font-weight:600; }
+
+  .status{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:3px 8px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:600;
+    border:1px solid var(--grid);
+    background:#fff;
+    white-space:nowrap;
+  }
+  .ok{ color:var(--excel); background: rgba(16,124,65,.08); border-color: rgba(16,124,65,.22); }
+  .bad{ color:var(--bad);  background: rgba(185,28,28,.10); border-color: rgba(185,28,28,.22); }
+
+  .linkbtn{
+    height:28px;
+    padding:0 10px;
+    border:1px solid var(--grid);
+    border-radius:8px;
+    background:#fff;
+    font-size:11px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .linkbtn:hover{ box-shadow: 0 10px 18px rgba(2,8,23,.06); transform: translateY(-1px); }
+
+  .empty{
+    padding:18px;
+    text-align:center;
+    color:var(--mut);
+    font-weight:600;
+    background:#fff;
+  }
+
+  /* ===== Excel Selection (cell + range) ===== */
+  td.cell{
+    cursor:default;
+  }
+  td.cell.active{
+    position:relative;
+    outline: 2px solid rgba(31,111,235,.70);
+    outline-offset:-2px;
+    z-index:6;
+    background:#fff !important;
+  }
+  td.cell.active::after{
+    content:"";
+    position:absolute;
+    width:7px; height:7px;
+    border-radius:2px;
+    background: rgba(31,111,235,.85);
+    left:2px; bottom:2px;
+  }
+
+  td.cell.inrange{
+    background: rgba(31,111,235,.08) !important;
+  }
+  td.cell.r-top{ box-shadow: inset 0 2px 0 rgba(31,111,235,.75); }
+  td.cell.r-bottom{ box-shadow: inset 0 -2px 0 rgba(31,111,235,.75); }
+  td.cell.r-left{ box-shadow: inset 2px 0 0 rgba(31,111,235,.75); }
+  td.cell.r-right{ box-shadow: inset -2px 0 0 rgba(31,111,235,.75); }
+
+  .rowhdr.selected,
+  .xl-letters th.selected,
+  .corner.selected{
+    background: rgba(31,111,235,.14) !important;
+    color:#374151 !important;
+  }
+
+  /* ===== Column resize handle ===== */
+  th.resizable{ position:relative; }
+  th.resizable .rz{
+    position:absolute;
+    left:0;
+    top:0;
+    width:10px;
+    height:100%;
+    cursor: col-resize;
+    opacity:0;
+  }
+  th.resizable:hover .rz{ opacity:1; }
+  th.resizable .rz::after{
+    content:"";
+    position:absolute;
+    left:4px;
+    top:0;
+    width:2px;
+    height:100%;
+    background: rgba(107,114,128,.35);
+  }
+
+  /* ===== Excel filter button + popover ===== */
+  .hflex{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .fbtn{
+    width:22px;
+    height:22px;
+    border:1px solid var(--grid);
+    border-radius:7px;
+    background:#fff;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    flex:0 0 auto;
+  }
+  .fbtn:hover{ background:#fafafa; }
+  .fbtn i{
+    width:10px;
+    height:10px;
+    display:block;
+    position:relative;
+  }
+  /* funnel icon */
+  .fbtn i:before{
+    content:"";
+    position:absolute;
+    left:0; right:0;
+    margin:auto;
+    top:0;
+    width:10px; height:6px;
+    border:2px solid #6b7280;
+    border-top:0;
+    border-left:0;
+    border-right:0;
+    transform: skewX(-12deg);
+  }
+  .fbtn i:after{
+    content:"";
+    position:absolute;
+    left:4px;
+    top:6px;
+    width:2px; height:4px;
+    background:#6b7280;
+    border-radius:2px;
+  }
+
+  .pop{
+    position:fixed;
+    z-index:3000;
+    width: 260px;
+    background:#fff;
+    border:1px solid var(--grid);
+    border-radius:12px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.18);
+    display:none;
+    overflow:hidden;
+  }
+  .pop.open{ display:block; }
+  .pop .phead{
+    padding:10px 10px 8px;
+    background: var(--head);
+    border-bottom:1px solid var(--grid);
+    font-size:11px;
+    font-weight:700;
+    color:#374151;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .pop .pclose{
+    border:1px solid var(--grid);
+    background:#fff;
+    border-radius:10px;
+    padding:4px 8px;
+    font-size:11px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .pop .pbody{ padding:10px; display:grid; gap:10px; }
+  .pop label{
+    font-size:11px;
+    font-weight:700;
+    color:var(--mut);
+    display:block;
+    margin-bottom:6px;
+  }
+  .pop input{
+    width:100%;
+    height:32px;
+    border:1px solid var(--grid);
+    border-radius:10px;
+    padding:0 10px;
+    font-size:12px;
+    outline:none;
+  }
+  .pop input:focus{
+    border-color: rgba(31,111,235,.55);
+    box-shadow: 0 0 0 3px rgba(31,111,235,.12);
+  }
+  .pop .pactions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .pop .pbtn{
+    height:32px;
+    padding:0 10px;
+    border:1px solid var(--grid);
+    border-radius:10px;
+    background:#fff;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .pop .pbtn.primary{
+    background: var(--excel);
+    border-color: rgba(16,124,65,.25);
+    color:#fff;
+  }
+
+  /* ===== Status bar ===== */
+  .statusbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:8px 12px;
+    border-top:1px solid var(--grid);
+    background:#fff;
+    font-size:11px;
+    font-weight:600;
+    color:var(--mut);
+  }
+  .statusbar b{ color:var(--txt); font-weight:700; }
+  .kbd{
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size:10px;
+    border:1px solid var(--grid);
+    border-bottom-color:#c9c9c9;
+    padding:2px 6px;
+    border-radius:8px;
+    background:#fafafa;
+    color:#374151;
+  }
+
+  /* Mobile: اخفاء أعمدة ثانوية */
+  @media (max-width: 760px){
+    th.c3, td.c3,
+    th.c5, td.c5,
+    th.c6, td.c6,
+    th.c9, td.c9{ display:none; }
+
+    :root{
+      --colA: 220px;
+      --colB: 110px;
+    }
+  }
+
+  /* ===== Toast ===== */
+  .toast{
+    position:fixed;
+    bottom:18px;
+    right:18px;
+    background:#111827;
+    color:#fff;
+    padding:10px 12px;
+    border-radius:10px;
+    font-size:12px;
+    font-weight:600;
+    box-shadow: 0 18px 40px rgba(0,0,0,.18);
+    opacity:0;
+    transform: translateY(10px);
+    transition:.18s ease;
+    z-index:4000;
+    pointer-events:none;
+    max-width:min(420px, 92vw);
+  }
+  .toast.show{ opacity:1; transform: translateY(0); }
+
+  /* ===== Drawer ===== */
+  .overlay{
+    position:fixed;
+    inset:0;
+    background: rgba(0,0,0,.35);
+    display:none;
+    z-index:3999;
+  }
+  .overlay.open{ display:block; }
+
+  .drawer{
+    position:fixed;
+    top:0;
+    left:0;
+    height:100vh;
+    width:min(380px, 92vw);
+    background:#fff;
+    border-right:1px solid var(--grid);
+    box-shadow: 30px 0 60px rgba(0,0,0,.16);
+    transform: translateX(-110%);
+    transition:.2s ease;
+    z-index:4000;
+    display:flex;
+    flex-direction:column;
+  }
+  .drawer.open{ transform: translateX(0); }
+
+  .dhead{
+    padding:10px 12px;
+    border-bottom:1px solid var(--grid);
+    background: var(--head);
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .dtitle{
+    margin:0;
+    font-size:12px;
+    font-weight:700;
+    color:var(--txt);
+    line-height:1.4;
+  }
+  .dclose{
+    border:1px solid var(--grid);
+    background:#fff;
+    border-radius:10px;
+    padding:6px 10px;
+    font-size:11px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .dbody{ padding:12px; overflow:auto; }
+  .card{
+    border:1px solid var(--grid);
+    border-radius:12px;
+    padding:10px;
+    margin-bottom:10px;
+    background:#fff;
+  }
+  .kv{
+    display:grid;
+    grid-template-columns: 110px 1fr;
+    gap:6px 10px;
+    font-size:11px;
+  }
+  .kv .k{ color:var(--mut); font-weight:700; }
+  .kv .v{ color:var(--txt); font-weight:700; word-break:break-word; }
+  .note{
+    color:var(--mut);
+    font-size:11px;
+    font-weight:600;
+    line-height:1.6;
+  }
+</style>
+
+<div class="sheet">
+
+  <div class="summary">
+    <div class="s-cell"><div class="s-k">المعروض</div><div class="s-v">{{ stats.total|default:0 }}</div></div>
+    <div class="s-cell"><div class="s-k">مستوفون</div><div class="s-v">{{ stats.eligible|default:0 }}</div></div>
+    <div class="s-cell"><div class="s-k">غير مستوفين</div><div class="s-v">{{ stats.not_eligible|default:0 }}</div></div>
+    <div class="s-cell"><div class="s-k">متوسط المجموع</div><div class="s-v">{{ stats.avg_total|default:"—" }}</div></div>
   </div>
 
-  <div class="card">
-    <form method="get" class="row">
-      <select name="batch">
-        <option value="">كل الدفعات</option>
-        {% for b in batches %}
-          <option value="{{ b.id }}" {% if filters.batch == b.id|stringformat:"s" %}selected{% endif %}>{{ b.title }}</option>
-        {% endfor %}
-      </select>
+  <div class="filters">
+    <form method="get">
+      <div class="fgrid">
+        <div class="field">
+          <label>بحث</label>
+          <input class="ctrl" id="qInput" name="q" value="{{ request.GET.q|default:'' }}"
+                 placeholder="بحث: الاسم / السجل / المدرسة ..." />
+        </div>
 
-      <select name="opp">
-        <option value="">كل المدارس</option>
-        {% for o in opps %}
-          <option value="{{ o.id }}" {% if filters.opp == o.id|stringformat:"s" %}selected{% endif %}>{{ o.name }}</option>
-        {% endfor %}
-      </select>
+        <div class="field">
+          <label>الدفعة</label>
+          <select class="ctrl" name="batch">
+            <option value="">كل الدفعات</option>
+            {% for b in batches %}
+              <option value="{{ b.id }}" {% if request.GET.batch == b.id|stringformat:"s" %}selected{% endif %}>
+                {{ b.name|default:b }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
 
-      <select name="role">
-        <option value="">كل الوظائف</option>
-        <option value="مدير" {% if filters.role == "مدير" %}selected{% endif %}>مدير</option>
-        <option value="وكيل" {% if filters.role == "وكيل" %}selected{% endif %}>وكيل</option>
-        <option value="أخرى" {% if filters.role == "أخرى" %}selected{% endif %}>أخرى</option>
-      </select>
+        <div class="field">
+          <label>المدرسة/الفرصة</label>
+          <select class="ctrl" name="school">
+            <option value="">الكل</option>
+            {% for s in schools %}
+              <option value="{{ s.id }}" {% if request.GET.school == s.id|stringformat:"s" %}selected{% endif %}>
+                {{ s.name|default:s }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
 
-      <select name="eligible">
-        <option value="">الكل</option>
-        <option value="1" {% if filters.eligible == "1" %}selected{% endif %}>مستوفي</option>
-        <option value="0" {% if filters.eligible == "0" %}selected{% endif %}>غير مستوفي</option>
-      </select>
+        <div class="field">
+          <label>الوظيفة</label>
+          <select class="ctrl" name="role">
+            <option value="">كل الوظائف</option>
+            {% for r in roles %}
+              <option value="{{ r }}" {% if request.GET.role == r %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-      <input name="q" value="{{ filters.q }}" placeholder="بحث: اسم/سجل/مدرسة المتقدم">
-      <button class="btn primary" type="submit">تطبيق</button>
-      <a class="btn" href="{% url 'tarsheeh:applications' %}">مسح</a>
+        <div class="field">
+          <label>الحالة</label>
+          <select class="ctrl" name="status">
+            <option value="">الكل</option>
+            <option value="eligible" {% if request.GET.status == "eligible" %}selected{% endif %}>مستوفي</option>
+            <option value="not_eligible" {% if request.GET.status == "not_eligible" %}selected{% endif %}>غير مستوفي</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button class="btnx primary" type="submit">تطبيق</button>
+          <a class="btnx" href="{% url 'tarsheeh:applications' %}">مسح</a>
+        </div>
+      </div>
     </form>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>المرشح</th>
-        <th>السجل</th>
-        <th>المدرسة/الفرصة</th>
-        <th>الوظيفة</th>
-        <th>درجة الملف</th>
-        <th>درجة المقابلة</th>
-        <th>المجموع</th>
-        <th>الحالة</th>
-        <th>سبب</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for a in rows %}
-      <tr>
-        <td>{{ a.candidate.full_name }}</td>
-        <td class="mut">{{ a.candidate.national_id }}</td>
-        <td>{{ a.opportunity.name }}</td>
-        <td><span class="tag">{{ a.applied_role }}</span></td>
-        <td>{{ a.file_score }}</td>
-        <td>{{ a.interview_score }}</td>
-        <td><b>{{ a.total_score }}</b></td>
-        <td>{% if a.is_eligible %}<span class="ok">مستوفي</span>{% else %}<span class="bad">غير مستوفي</span>{% endif %}</td>
-        <td class="mut">{{ a.ineligible_reason }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="9" class="mut">لا توجد بيانات</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-viewport">
+    <div class="table-scroll" id="tableScroll">
+      <table id="xlTable" aria-label="Applications">
+        <thead>
+          <!-- Letters row -->
+          <tr class="xl-letters">
+            <th class="freezeRow rn corner" data-corner="1">▦</th>
+            <th class="freeze1 c1" data-col="1">A</th>
+            <th class="freeze2 c2" data-col="2">B</th>
+            <th class="c3" data-col="3">C</th>
+            <th class="c4" data-col="4">D</th>
+            <th class="c5" data-col="5">E</th>
+            <th class="c6" data-col="6">F</th>
+            <th class="c7" data-col="7">G</th>
+            <th class="c8" data-col="8">H</th>
+            <th class="c9" data-col="9">I</th>
+          </tr>
+
+          <!-- Header row -->
+          <tr class="hdr">
+            <th class="freezeRow rn rowhdr-h">#</th>
+
+            <th class="freeze1 c1 resizable" data-col="1">
+              <div class="hflex">
+                <span>المرشح</span>
+                <button class="fbtn" type="button" data-filter="1" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="1"></span>
+            </th>
+
+            <th class="freeze2 c2 resizable" data-col="2">
+              <div class="hflex">
+                <span>السجل</span>
+                <button class="fbtn" type="button" data-filter="2" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="2"></span>
+            </th>
+
+            <th class="c3 resizable" data-col="3">
+              <div class="hflex">
+                <span>المدرسة/الفرصة</span>
+                <button class="fbtn" type="button" data-filter="3" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="3"></span>
+            </th>
+
+            <th class="c4 resizable" data-col="4">
+              <div class="hflex">
+                <span>الوظيفة</span>
+                <button class="fbtn" type="button" data-filter="4" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="4"></span>
+            </th>
+
+            <th class="c5 resizable" data-col="5">
+              <div class="hflex">
+                <span>درجة الملف</span>
+                <button class="fbtn" type="button" data-filter="5" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="5"></span>
+            </th>
+
+            <th class="c6 resizable" data-col="6">
+              <div class="hflex">
+                <span>درجة المقابلة</span>
+                <button class="fbtn" type="button" data-filter="6" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="6"></span>
+            </th>
+
+            <th class="c7 resizable" data-col="7">
+              <div class="hflex">
+                <span>المجموع</span>
+                <button class="fbtn" type="button" data-filter="7" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="7"></span>
+            </th>
+
+            <th class="c8 resizable" data-col="8">
+              <div class="hflex">
+                <span>الحالة</span>
+                <button class="fbtn" type="button" data-filter="8" title="تصفية/فرز"><i></i></button>
+              </div>
+              <span class="rz" data-rz="8"></span>
+            </th>
+
+            <th class="c9">تفاصيل</th>
+          </tr>
+        </thead>
+
+        <tbody id="tbody">
+          {% for a in rows %}
+            <tr class="row"
+                data-name="{{ a.candidate.full_name|default:''|escapejs }}"
+                data-nid="{{ a.candidate.national_id|default:''|escapejs }}"
+                data-phone="{{ a.candidate.phone|default:''|escapejs }}"
+                data-job="{{ a.candidate.current_job|default:''|escapejs }}"
+                data-appschool="{{ a.candidate.applicant_school|default:''|escapejs }}"
+                data-appsector="{{ a.candidate.applicant_sector|default:''|escapejs }}"
+                data-ydir="{{ a.candidate.years_director|default:'0'|escapejs }}"
+                data-ydep="{{ a.candidate.years_deputy|default:'0'|escapejs }}"
+                data-opp="{{ a.opportunity.name|default:''|escapejs }}"
+                data-oppsector="{{ a.opportunity.sector|default:''|escapejs }}"
+                data-role="{{ a.applied_role|default:''|escapejs }}"
+                data-file="{{ a.file_score|default:'0' }}"
+                data-interview="{{ a.interview_score|default:'0' }}"
+                data-total="{{ a.total_score|default:'0' }}"
+                data-eligible="{% if a.is_eligible %}1{% else %}0{% endif %}"
+            >
+              <td class="freezeRow rn rowhdr cell" data-val="{{ forloop.counter }}">{{ forloop.counter }}</td>
+
+              <td class="freeze1 c1 cell" data-val="{{ a.candidate.full_name|default:'' }}">
+                <div class="name">{{ a.candidate.full_name|default:"—" }}</div>
+                <div class="sub">
+                  {{ a.candidate.national_id }}{% if a.candidate.phone %} — {{ a.candidate.phone }}{% endif %}
+                </div>
+              </td>
+
+              <td class="freeze2 c2 cell num" data-val="{{ a.candidate.national_id|default:'' }}">
+                {{ a.candidate.national_id|default:"—" }}
+              </td>
+
+              <td class="c3 cell" data-val="{{ a.opportunity.name|default:'' }}" title="{{ a.opportunity.name|default:'' }}">
+                <div class="name" style="font-weight:600;">{{ a.opportunity.name|default:"—" }}</div>
+                {% if a.opportunity.sector %}<div class="sub">{{ a.opportunity.sector }}</div>{% endif %}
+              </td>
+
+              <td class="c4 cell" data-val="{{ a.applied_role|default:'' }}">{{ a.applied_role|default:"—" }}</td>
+              <td class="c5 cell num" data-val="{{ a.file_score }}">{{ a.file_score }}</td>
+              <td class="c6 cell num" data-val="{{ a.interview_score }}">{{ a.interview_score }}</td>
+              <td class="c7 cell num" data-val="{{ a.total_score }}">{{ a.total_score }}</td>
+
+              <td class="c8 cell" data-val="{% if a.is_eligible %}مستوفي{% else %}غير مستوفي{% endif %}">
+                {% if a.is_eligible %}
+                  <span class="status ok">مستوفي</span>
+                {% else %}
+                  <span class="status bad">غير مستوفي</span>
+                {% endif %}
+              </td>
+
+              <td class="c9">
+                <button class="linkbtn" type="button" data-open="1">تفاصيل</button>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10" class="empty">لا توجد بيانات مطابقة.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div>
+      <span>التحديد: <b id="selInfo">—</b></span>
+      <span style="margin-right:10px">نسخ: <span class="kbd">Ctrl</span>+<span class="kbd">C</span></span>
+      <span style="margin-right:10px">تحديد الكل: <span class="kbd">Ctrl</span>+<span class="kbd">A</span></span>
+      <span style="margin-right:10px">توسيع: <span class="kbd">Shift</span> + الأسهم</span>
+    </div>
+    <div>
+      <span>فلترة عمود: زر ⌄ بجانب العنوان</span>
+    </div>
+  </div>
 </div>
+
+<div class="toast" id="toast">تم النسخ</div>
+
+<!-- Filter Popover -->
+<div class="pop" id="pop">
+  <div class="phead">
+    <span id="pTitle">تصفية</span>
+    <button class="pclose" type="button" id="pClose">إغلاق</button>
+  </div>
+  <div class="pbody">
+    <div>
+      <label>يحتوي على</label>
+      <input id="pQuery" placeholder="اكتب نصًا..." />
+    </div>
+
+    <div class="pactions">
+      <button class="pbtn primary" type="button" id="pApply">تطبيق</button>
+      <button class="pbtn" type="button" id="pClear">مسح التصفية</button>
+    </div>
+
+    <div class="pactions">
+      <button class="pbtn" type="button" id="pSortAsc">فرز تصاعدي</button>
+      <button class="pbtn" type="button" id="pSortDesc">فرز تنازلي</button>
+    </div>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer" aria-live="polite">
+  <div class="dhead">
+    <h3 class="dtitle" id="dTitle">تفاصيل المرشح</h3>
+    <button class="dclose" type="button" id="dClose">إغلاق</button>
+  </div>
+  <div class="dbody">
+    <div class="card">
+      <div class="kv">
+        <div class="k">الاسم</div><div class="v" id="dName">—</div>
+        <div class="k">السجل</div><div class="v" id="dNid">—</div>
+        <div class="k">الجوال</div><div class="v" id="dPhone">—</div>
+        <div class="k">العمل الحالي</div><div class="v" id="dJob">—</div>
+        <div class="k">مدرسة المتقدم</div><div class="v" id="dAppSchool">—</div>
+        <div class="k">قطاع المتقدم</div><div class="v" id="dAppSector">—</div>
+        <div class="k">خبرة مدير</div><div class="v" id="dYDir">—</div>
+        <div class="k">خبرة وكيل</div><div class="v" id="dYDep">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="kv">
+        <div class="k">الفرصة/المدرسة</div><div class="v" id="dOpp">—</div>
+        <div class="k">القطاع</div><div class="v" id="dOppSector">—</div>
+        <div class="k">الوظيفة</div><div class="v" id="dRole">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="kv">
+        <div class="k">درجة الملف</div><div class="v" id="dFile">—</div>
+        <div class="k">درجة المقابلة</div><div class="v" id="dInterview">—</div>
+        <div class="k">المجموع</div><div class="v" id="dTotal">—</div>
+        <div class="k">الحالة</div><div class="v" id="dEligible">—</div>
+      </div>
+    </div>
+
+    <div class="note">
+      Excel++:
+      سحب لتحديد نطاق — Shift لتوسيع — Ctrl+C للنسخ إلى Excel — زر التصفية على عنوان العمود للفلترة/الفرز.
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const table   = document.getElementById("xlTable");
+  const tbody   = document.getElementById("tbody");
+  const toastEl = document.getElementById("toast");
+  const selInfo = document.getElementById("selInfo");
+  const qInput  = document.getElementById("qInput");
+
+  // Drawer
+  const overlay = document.getElementById("overlay");
+  const drawer  = document.getElementById("drawer");
+  const closeBtn= document.getElementById("dClose");
+
+  // Filter pop
+  const pop     = document.getElementById("pop");
+  const pTitle  = document.getElementById("pTitle");
+  const pClose  = document.getElementById("pClose");
+  const pQuery  = document.getElementById("pQuery");
+  const pApply  = document.getElementById("pApply");
+  const pClear  = document.getElementById("pClear");
+  const pSortAsc  = document.getElementById("pSortAsc");
+  const pSortDesc = document.getElementById("pSortDesc");
+
+  // ---------- Excel state ----------
+  // selectable columns are 1..8 (exclude 0 rowhdr, exclude 9 actions)
+  const MIN_COL = 1;
+  const MAX_COL = 8;
+
+  let isDragging = false;
+  let anchor = null;  // {r,c}
+  let active = null;  // {r,c}
+  let range = null;   // {r1,c1,r2,c2} normalized
+
+  // Filters state: colIndex -> query
+  const filters = {}; // e.g. {3: "مدرسة", 4:"وكيل"}
+  let popCol = null;
+
+  // Column widths persistence
+  const storageKey = "tarsheeh_xl_widths_" + location.pathname;
+
+  function toast(msg){
+    toastEl.textContent = msg || "تم النسخ";
+    toastEl.classList.add("show");
+    setTimeout(()=>toastEl.classList.remove("show"), 900);
+  }
+
+  function setText(id, v){
+    const el = document.getElementById(id);
+    el.textContent = (v && String(v).trim()) ? v : "—";
+  }
+
+  function openDrawer(){
+    overlay.classList.add("open");
+    drawer.classList.add("open");
+  }
+  function closeDrawer(){
+    overlay.classList.remove("open");
+    drawer.classList.remove("open");
+  }
+
+  function fillDrawer(tr){
+    setText("dName", tr.dataset.name);
+    setText("dNid", tr.dataset.nid);
+    setText("dPhone", tr.dataset.phone);
+    setText("dJob", tr.dataset.job);
+    setText("dAppSchool", tr.dataset.appschool);
+    setText("dAppSector", tr.dataset.appsector);
+    setText("dYDir", tr.dataset.ydir);
+    setText("dYDep", tr.dataset.ydep);
+
+    setText("dOpp", tr.dataset.opp);
+    setText("dOppSector", tr.dataset.oppsector);
+    setText("dRole", tr.dataset.role);
+
+    setText("dFile", tr.dataset.file);
+    setText("dInterview", tr.dataset.interview);
+    setText("dTotal", tr.dataset.total);
+    setText("dEligible", tr.dataset.eligible === "1" ? "مستوفي" : "غير مستوفي");
+
+    document.getElementById("dTitle").textContent = "تفاصيل: " + (tr.dataset.name || "—");
+  }
+
+  // ---------- helpers ----------
+  function rows(){
+    return Array.from(tbody.querySelectorAll("tr.row"));
+  }
+
+  function normalizeRange(a, b){
+    const r1 = Math.min(a.r, b.r);
+    const r2 = Math.max(a.r, b.r);
+    const c1 = Math.min(a.c, b.c);
+    const c2 = Math.max(a.c, b.c);
+    return {r1, c1, r2, c2};
+  }
+
+  function cellAt(r, c){
+    const tr = rows()[r];
+    if (!tr) return null;
+    return tr.children[c] || null;
+  }
+
+  function clearSelectionUI(){
+    tbody.querySelectorAll("td.cell.active").forEach(td=>td.classList.remove("active"));
+    tbody.querySelectorAll("td.cell.inrange, td.cell.r-top, td.cell.r-bottom, td.cell.r-left, td.cell.r-right").forEach(td=>{
+      td.classList.remove("inrange","r-top","r-bottom","r-left","r-right");
+    });
+    tbody.querySelectorAll("td.rowhdr.selected").forEach(td=>td.classList.remove("selected"));
+    table.querySelectorAll(".xl-letters th.selected").forEach(th=>th.classList.remove("selected"));
+    const corner = table.querySelector(".corner.selected");
+    if (corner) corner.classList.remove("selected");
+  }
+
+  function drawRange(){
+    clearSelectionUI();
+    if (!range || !active) return;
+
+    // active cell
+    const aCell = cellAt(active.r, active.c);
+    if (aCell) aCell.classList.add("active");
+
+    // range fill + borders
+    for (let r = range.r1; r <= range.r2; r++){
+      for (let c = range.c1; c <= range.c2; c++){
+        const td = cellAt(r,c);
+        if (!td || !td.classList.contains("cell")) continue;
+        td.classList.add("inrange");
+        if (r === range.r1) td.classList.add("r-top");
+        if (r === range.r2) td.classList.add("r-bottom");
+        if (c === range.c1) td.classList.add("r-right"); // RTL: visually "right edge" is start
+        if (c === range.c2) td.classList.add("r-left");  // RTL: left edge is end
+      }
+      // highlight row header when full row selected across data columns
+      if (range.c1 === MIN_COL && range.c2 === MAX_COL){
+        const tr = rows()[r];
+        const rh = tr ? tr.children[0] : null;
+        if (rh && rh.classList.contains("rowhdr")) rh.classList.add("selected");
+      }
+    }
+
+    // column letters highlight if full column range
+    if (range.r1 === 0 && range.r2 === rows().length - 1){
+      for (let c = range.c1; c <= range.c2; c++){
+        const th = table.querySelector('.xl-letters th[data-col="'+c+'"]');
+        if (th) th.classList.add("selected");
+      }
+    }
+
+    // corner highlight if full all
+    if (range.r1 === 0 && range.r2 === rows().length - 1 && range.c1 === MIN_COL && range.c2 === MAX_COL){
+      const corner = table.querySelector(".corner");
+      if (corner) corner.classList.add("selected");
+    }
+
+    // statusbar info
+    const rCount = range.r2 - range.r1 + 1;
+    const cCount = range.c2 - range.c1 + 1;
+    selInfo.textContent = `${rCount} صف × ${cCount} عمود`;
+  }
+
+  function setActive(rc){
+    active = rc;
+    if (!anchor) anchor = rc;
+    range = normalizeRange(anchor, active);
+    drawRange();
+  }
+
+  function clampCell(rc){
+    rc.c = Math.max(MIN_COL, Math.min(MAX_COL, rc.c));
+    rc.r = Math.max(0, Math.min(rows().length - 1, rc.r));
+    return rc;
+  }
+
+  function cellCoordFromTD(td){
+    const tr = td.closest("tr.row");
+    const r = rows().indexOf(tr);
+    const c = Array.from(tr.children).indexOf(td);
+    return {r, c};
+  }
+
+  function getCellVal(td){
+    const v = (td.dataset && td.dataset.val) ? String(td.dataset.val) : td.textContent;
+    return (v || "").trim();
+  }
+
+  function buildCopyTSV(){
+    if (!range) return "";
+    const lines = [];
+    for (let r = range.r1; r <= range.r2; r++){
+      const vals = [];
+      for (let c = range.c1; c <= range.c2; c++){
+        const td = cellAt(r,c);
+        vals.push(getCellVal(td || {textContent:""}));
+      }
+      lines.push(vals.join("\t"));
+    }
+    return lines.join("\n");
+  }
+
+  async function copyText(text){
+    if (!text) return;
+    try{
+      await navigator.clipboard.writeText(text);
+      toast("تم النسخ إلى الحافظة");
+    }catch(e){
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      toast("تم النسخ");
+    }
+  }
+
+  // ---------- Range selection by mouse ----------
+  tbody.addEventListener("mousedown", (e)=>{
+    const td = e.target.closest("td.cell");
+    if (!td) return;
+
+    // ignore action column (button)
+    if (td.classList.contains("c9")) return;
+
+    // row header clicks select full row
+    if (td.classList.contains("rowhdr")){
+      const tr = td.closest("tr.row");
+      const r = rows().indexOf(tr);
+      anchor = {r, c: MIN_COL};
+      active = {r, c: MAX_COL};
+      range = normalizeRange(anchor, active);
+      drawRange();
+      isDragging = false;
+      return;
+    }
+
+    const rc = clampCell(cellCoordFromTD(td));
+
+    // Shift extends from existing anchor
+    if (e.shiftKey && anchor){
+      isDragging = false;
+      setActive(rc);
+      return;
+    }
+
+    isDragging = true;
+    anchor = rc;
+    active = rc;
+    range = normalizeRange(anchor, active);
+    drawRange();
+    e.preventDefault();
+  });
+
+  tbody.addEventListener("mouseover", (e)=>{
+    if (!isDragging) return;
+    const td = e.target.closest("td.cell");
+    if (!td) return;
+    if (td.classList.contains("rowhdr") || td.classList.contains("c9")) return;
+    const rc = clampCell(cellCoordFromTD(td));
+    setActive(rc);
+  });
+
+  document.addEventListener("mouseup", ()=>{
+    isDragging = false;
+  });
+
+  // Double click copies active cell
+  tbody.addEventListener("dblclick", (e)=>{
+    const td = e.target.closest("td.cell");
+    if (!td || td.classList.contains("rowhdr") || td.classList.contains("c9")) return;
+    const rc = clampCell(cellCoordFromTD(td));
+    anchor = rc; active = rc; range = normalizeRange(anchor, active);
+    drawRange();
+    copyText(getCellVal(td));
+  });
+
+  // Open drawer
+  tbody.addEventListener("click", (e)=>{
+    const btn = e.target.closest('[data-open="1"]');
+    if (!btn) return;
+    const tr = e.target.closest("tr.row");
+    if (!tr) return;
+    fillDrawer(tr);
+    openDrawer();
+  });
+
+  overlay.addEventListener("click", closeDrawer);
+  closeBtn.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeDrawer(); });
+
+  // ---------- Keyboard ----------
+  document.addEventListener("keydown", (e)=>{
+    // Ctrl+F focus server search
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f"){
+      if (qInput){
+        e.preventDefault();
+        qInput.focus();
+        qInput.select();
+      }
+      return;
+    }
+
+    // Ctrl+A select all data area
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a"){
+      e.preventDefault();
+      const rLast = rows().length - 1;
+      anchor = {r:0, c:MIN_COL};
+      active = {r:rLast, c:MAX_COL};
+      range = normalizeRange(anchor, active);
+      drawRange();
+      return;
+    }
+
+    // Ctrl+C copy range/cell
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c"){
+      if (!range) return;
+      e.preventDefault();
+      copyText(buildCopyTSV());
+      return;
+    }
+
+    // If no active/range, ignore arrows
+    if (!active) return;
+
+    const move = (dr, dc, extend)=>{
+      const next = clampCell({r: active.r + dr, c: active.c + dc});
+      if (extend){
+        // keep anchor, move active
+        active = next;
+        range = normalizeRange(anchor, active);
+        drawRange();
+      }else{
+        anchor = next;
+        active = next;
+        range = normalizeRange(anchor, active);
+        drawRange();
+      }
+      const tr = rows()[active.r];
+      if (tr) tr.scrollIntoView({block:"nearest"});
+    };
+
+    const extend = e.shiftKey;
+
+    if (e.key === "ArrowDown"){ e.preventDefault(); move(1,0,extend); }
+    if (e.key === "ArrowUp"){ e.preventDefault(); move(-1,0,extend); }
+    if (e.key === "ArrowLeft"){ e.preventDefault(); move(0,1,extend); }   // RTL
+    if (e.key === "ArrowRight"){ e.preventDefault(); move(0,-1,extend); } // RTL
+
+    // Enter open drawer (row of active)
+    if (e.key === "Enter"){
+      const tr = rows()[active.r];
+      if (tr){
+        e.preventDefault();
+        fillDrawer(tr);
+        openDrawer();
+      }
+    }
+  });
+
+  // ---------- Letters row click: select full column ----------
+  table.addEventListener("click", (e)=>{
+    const th = e.target.closest("th");
+    if (!th) return;
+
+    // Corner => select all
+    if (th.dataset && th.dataset.corner === "1"){
+      const rLast = rows().length - 1;
+      anchor = {r:0, c:MIN_COL};
+      active = {r:rLast, c:MAX_COL};
+      range = normalizeRange(anchor, active);
+      drawRange();
+      return;
+    }
+
+    // Letters row
+    const lettersRow = th.closest(".xl-letters");
+    if (lettersRow && th.dataset && th.dataset.col){
+      const c = parseInt(th.dataset.col, 10);
+      if (isNaN(c) || c < MIN_COL || c > MAX_COL) return;
+      const rLast = rows().length - 1;
+      anchor = {r:0, c:c};
+      active = {r:rLast, c:c};
+      range = normalizeRange(anchor, active);
+      drawRange();
+      return;
+    }
+  });
+
+  // ---------- Column resizing + persist ----------
+  function saveWidths(widths){
+    try{ localStorage.setItem(storageKey, JSON.stringify(widths)); }catch(e){}
+  }
+  function loadWidths(){
+    try{
+      const raw = localStorage.getItem(storageKey);
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+  function applyWidth(colIndex, px){
+    const rowsAll = table.querySelectorAll("tr");
+    rowsAll.forEach(r=>{
+      const cell = r.children[colIndex];
+      if (cell) cell.style.width = px + "px";
+    });
+  }
+  const restored = loadWidths();
+  if (restored && typeof restored === "object"){
+    Object.keys(restored).forEach(k=>{
+      const idx = parseInt(k, 10);
+      const px  = restored[k];
+      if (!isNaN(idx) && px) applyWidth(idx, px);
+    });
+  }
+
+  let drag = null;
+  table.querySelectorAll("th.resizable .rz").forEach(handle=>{
+    handle.addEventListener("mousedown", (e)=>{
+      const th = e.target.closest("th");
+      const colIndex = Array.from(th.parentElement.children).indexOf(th);
+      const startX = e.clientX;
+      const startW = th.getBoundingClientRect().width;
+      drag = { colIndex, startX, startW };
+      document.body.style.cursor = "col-resize";
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+
+  document.addEventListener("mousemove", (e)=>{
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    const w = Math.max(70, Math.round(drag.startW + dx));
+    applyWidth(drag.colIndex, w);
+  });
+
+  document.addEventListener("mouseup", ()=>{
+    if (!drag) return;
+    document.body.style.cursor = "";
+    const widths = loadWidths() || {};
+    const anyCell = table.querySelector("tr.hdr")?.children?.[drag.colIndex];
+    const px = anyCell ? Math.round(anyCell.getBoundingClientRect().width) : null;
+    if (px) widths[String(drag.colIndex)] = px;
+    saveWidths(widths);
+    drag = null;
+  });
+
+  // ---------- AutoFilter (contains) + Sort ----------
+  function openPopForCol(col, x, y){
+    popCol = col;
+    pTitle.textContent = "تصفية/فرز: العمود " + String.fromCharCode(64 + col); // A=1
+    pQuery.value = filters[col] || "";
+    pop.style.left = Math.max(12, Math.min(window.innerWidth - 272, x)) + "px";
+    pop.style.top  = Math.max(12, Math.min(window.innerHeight - 220, y)) + "px";
+    pop.classList.add("open");
+    pQuery.focus();
+    pQuery.select();
+  }
+
+  function closePop(){
+    pop.classList.remove("open");
+    popCol = null;
+  }
+
+  function applyClientFilters(){
+    const fs = Object.keys(filters).map(k=>({col:parseInt(k,10), q:(filters[k]||"").toLowerCase()}))
+                                  .filter(x=>x.q);
+
+    const all = rows();
+    let shown = 0;
+
+    all.forEach(tr=>{
+      let ok = true;
+      for (const f of fs){
+        const td = tr.children[f.col];
+        const val = ((td && td.dataset && td.dataset.val) ? td.dataset.val : (td ? td.textContent : "")).toLowerCase();
+        if (!val.includes(f.q)){ ok = false; break; }
+      }
+      tr.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    });
+
+    // keep selection sane
+    selInfo.textContent = fs.length ? `مفلتر: ${shown} صف` : (range ? selInfo.textContent : "—");
+  }
+
+  function sortByCol(col, dir){
+    // dir: 1 asc, -1 desc
+    const list = rows();
+    const visible = list.filter(tr => tr.style.display !== "none");
+
+    function getVal(tr){
+      const td = tr.children[col];
+      const raw = (td && td.dataset && td.dataset.val) ? td.dataset.val : (td ? td.textContent : "");
+      const s = String(raw || "").trim();
+      const n = Number(s.replace(/[^\d.\-]/g,""));
+      if (s && !Number.isNaN(n) && /[\d]/.test(s)) return {t:"n", v:n, s};
+      return {t:"s", v:s.toLowerCase(), s};
+    }
+
+    visible.sort((a,b)=>{
+      const A = getVal(a), B = getVal(b);
+      if (A.t === "n" && B.t === "n"){
+        return dir * (A.v - B.v);
+      }
+      return dir * (A.v.localeCompare(B.v, "ar"));
+    });
+
+    // re-append visible in order, keep hidden at bottom untouched
+    const frag = document.createDocumentFragment();
+    visible.forEach(tr=>frag.appendChild(tr));
+    tbody.appendChild(frag);
+
+    // renumber row headers (visible order + hidden remain after)
+    Array.from(tbody.querySelectorAll("tr.row")).forEach((tr, idx)=>{
+      const rh = tr.children[0];
+      if (rh){
+        rh.textContent = String(idx + 1);
+        rh.dataset.val = String(idx + 1);
+      }
+    });
+
+    // reset selection to top-left visible
+    const first = Array.from(tbody.querySelectorAll("tr.row")).find(tr=>tr.style.display !== "none");
+    if (first){
+      const r = rows().indexOf(first);
+      anchor = {r, c:MIN_COL};
+      active = {r, c:MIN_COL};
+      range = normalizeRange(anchor, active);
+      drawRange();
+    }
+  }
+
+  table.addEventListener("click", (e)=>{
+    const btn = e.target.closest("[data-filter]");
+    if (!btn) return;
+    const col = parseInt(btn.dataset.filter, 10);
+    if (isNaN(col) || col < MIN_COL || col > MAX_COL) return;
+
+    const rect = btn.getBoundingClientRect();
+    openPopForCol(col, rect.left, rect.bottom + 6);
+  });
+
+  pClose.addEventListener("click", closePop);
+  document.addEventListener("mousedown", (e)=>{
+    if (!pop.classList.contains("open")) return;
+    if (e.target.closest("#pop")) return;
+    if (e.target.closest("[data-filter]")) return;
+    closePop();
+  });
+
+  pApply.addEventListener("click", ()=>{
+    if (!popCol) return;
+    const q = (pQuery.value || "").trim();
+    if (q) filters[popCol] = q;
+    else delete filters[popCol];
+    applyClientFilters();
+    closePop();
+  });
+
+  pClear.addEventListener("click", ()=>{
+    if (!popCol) return;
+    delete filters[popCol];
+    applyClientFilters();
+    closePop();
+  });
+
+  pSortAsc.addEventListener("click", ()=>{
+    if (!popCol) return;
+    sortByCol(popCol, 1);
+    closePop();
+  });
+  pSortDesc.addEventListener("click", ()=>{
+    if (!popCol) return;
+    sortByCol(popCol, -1);
+    closePop();
+  });
+
+  // initial selection if rows exist
+  const firstRow = rows()[0];
+  if (firstRow){
+    anchor = {r:0, c:MIN_COL};
+    active = {r:0, c:MIN_COL};
+    range = normalizeRange(anchor, active);
+    drawRange();
+  }else{
+    selInfo.textContent = "—";
+  }
+
+})();
+</script>
 {% endblock %}

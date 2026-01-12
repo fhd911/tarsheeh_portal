@@ -1,258 +1,739 @@
+{# templates/tarsheeh/scores.html #}
 {% extends "tarsheeh/base.html" %}
-{% block title %}شاشة المدخلات{% endblock %}
+
+{% block title %}إدخال الدرجات{% endblock %}
+{% block page_title %}إدخال الدرجات{% endblock %}
+{% block breadcrumb %}<span>لوحة التحكم</span> <span>—</span> <span>الدرجات</span>{% endblock %}
+
+{% block top_actions %}
+  <a class="btn" href="{% url 'tarsheeh:applications' %}">الطلبات</a>
+  <a class="btn primary" href="{% url 'tarsheeh:scores' %}">الدرجات</a>
+{% endblock %}
 
 {% block content %}
-<div class="grid">
+<style>
+  :root{
+    /* Excel palette */
+    --grid:#d9d9d9;
+    --grid2:#ededed;
+    --head:#f3f3f3;
+    --txt:#111827;
+    --mut:#6b7280;
+    --excel:#107c41;
+    --blue:#2563eb;
+    --bad:#b91c1c;
 
-  <!-- =========================
-       Filters
-       ========================= -->
-  <div class="card">
-    <div style="font-weight:900; margin-bottom:8px">فلترة المدخلات</div>
+    --r:12px;
+    --drawerW: 380px;
 
-    <form method="get" class="row" style="align-items:center; flex-wrap:wrap;">
-      <select name="batch">
-        <option value="">كل الدفعات</option>
-        {% for b in batches %}
-          <option value="{{ b.id }}" {% if filters.batch == b.id|stringformat:"s" %}selected{% endif %}>{{ b.title }}</option>
-        {% endfor %}
-      </select>
+    /* Excel-ish typography (خفيف) */
+    --fs: 12px;
+    --fsHead: 11px;
+    --fw: 400;       /* أخف */
+    --fwStrong: 600; /* شبه bold */
+    --fwHead: 600;   /* رأس الجدول */
+  }
 
-      <select name="opp">
-        <option value="">كل المدارس</option>
-        {% for o in opps %}
-          <option value="{{ o.id }}" {% if filters.opp == o.id|stringformat:"s" %}selected{% endif %}>{{ o.name }}</option>
-        {% endfor %}
-      </select>
+  html,body{ overflow-x:hidden; }
+  *{ box-sizing:border-box; }
 
-      <select name="role">
-        <option value="">كل الوظائف</option>
-        <option value="مدير" {% if filters.role == "مدير" %}selected{% endif %}>مدير</option>
-        <option value="وكيل" {% if filters.role == "وكيل" %}selected{% endif %}>وكيل</option>
-        <option value="أخرى" {% if filters.role == "أخرى" %}selected{% endif %}>أخرى</option>
-      </select>
+  /* ===== Sheet wrapper ===== */
+  .sheet{
+    background:#fff;
+    border:1px solid var(--grid);
+    border-radius:var(--r);
+    overflow:hidden;
+  }
 
-      <label class="row" style="gap:6px; align-items:center;">
-        <input type="checkbox" name="pending" value="1" {% if filters.pending == "1" %}checked{% endif %}>
-        فقط النواقص
-      </label>
+  /* ===== Top bar (compact) ===== */
+  .bar{
+    padding:8px 10px;
+    border-bottom:1px solid var(--grid);
+    background:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .bar .hint{
+    color:var(--mut);
+    font-size:11px;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .bar .kpis{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    font-size:11px;
+    font-weight:600;
+    color:var(--mut);
+  }
+  .bar .kpis b{ color:var(--txt); font-weight:700; }
 
-      <button class="btn primary" type="submit">تطبيق</button>
-      <a class="btn" href="{% url 'tarsheeh:scores' %}">مسح</a>
+  .btnx{
+    height:32px;
+    padding:0 12px;
+    border-radius:8px;                 /* Excel-ish */
+    border:1px solid var(--grid);
+    background:#fff;
+    font-weight:600;
+    font-size:12px;
+    cursor:pointer;
+  }
+  .btnx.primary{
+    background:var(--excel);
+    color:#fff;
+    border-color:rgba(16,124,65,.25);
+  }
+  .btnx:active{ transform: translateY(1px); }
+
+  /* ===== Filters ===== */
+  .filters{
+    padding:8px 10px;
+    border-bottom:1px solid var(--grid);
+    background:var(--head);
+  }
+  .fgrid{
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr auto;
+    gap:8px;
+    align-items:end;
+  }
+  @media (max-width: 980px){
+    .fgrid{ grid-template-columns: 1fr 1fr; }
+  }
+
+  .field label{
+    display:block;
+    margin:0 0 6px;
+    font-size:11px;
+    font-weight:600;
+    color:var(--mut);
+  }
+  .ctrl{
+    width:100%;
+    height:32px;
+    border:1px solid var(--grid);
+    border-radius:8px;
+    background:#fff;
+    padding:0 10px;
+    font-size:12px;
+    font-weight:500;
+    outline:none;
+  }
+  .ctrl:focus{
+    border-color: rgba(37,99,235,.55);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+  }
+
+  /* ===== Table (Excel style) ===== */
+  .tablewrap{ background:#fff; }
+
+  /* مهم: منع شريط تمرير أفقي نهائياً */
+  .table-viewport{
+    width:100%;
+    overflow-x:hidden; /* ✅ إلغاء الشريط الأفقي */
+  }
+
+  /* تمرير عمودي فقط داخل الجدول + إخفاء الشريط (مع بقاء التمرير) */
+  .table-scroll{
+    max-height: 72vh;
+    overflow-y:auto;
+    overflow-x:hidden;
+    scrollbar-width:none;         /* Firefox */
+    -ms-overflow-style:none;      /* IE/Edge legacy */
+  }
+  .table-scroll::-webkit-scrollbar{ width:0; height:0; } /* Chrome */
+
+  table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    table-layout:fixed;
+  }
+
+  thead th{
+    position:sticky;
+    top:0;
+    z-index:3;
+    background:var(--head);
+    border-bottom:1px solid var(--grid);
+    padding:7px 8px;
+    font-size:var(--fsHead);
+    font-weight:var(--fwHead);
+    color:#374151;
+    text-align:right;
+    white-space:nowrap;
+  }
+
+  /* Grid lines */
+  td, th{ border-left:1px solid var(--grid2); }
+  td:first-child, th:first-child{ border-left:0; }
+
+  tbody td{
+    border-bottom:1px solid var(--grid2);
+    padding:6px 8px;               /* أقل */
+    font-size:var(--fs);           /* أصغر */
+    font-weight:var(--fw);         /* أخف */
+    color:var(--txt);
+    vertical-align:middle;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    background:#fff;
+    line-height:1.25;
+  }
+
+  /* Hover + active */
+  tbody tr:hover td{ background: rgba(37,99,235,.05); }
+  tbody tr.active td{ background: rgba(16,124,65,.08); }
+
+  /* Freeze RTL (عمودين فقط) */
+  .freeze1{
+    position:sticky;
+    right:0;
+    z-index:2;
+    background:#fff;
+  }
+  .freeze2{
+    position:sticky;
+    right:220px;
+    z-index:2;
+    background:#fff;
+  }
+  thead .freeze1, thead .freeze2{
+    z-index:4;
+    background:var(--head);
+  }
+
+  /* Column widths (مضبوطة بدون حاجة لتمرير أفقي) */
+  th.c1, td.c1{ width:220px; }
+  th.c2, td.c2{ width:110px; }
+  th.c3, td.c3{ width:240px; }
+  th.c4, td.c4{ width:90px; }
+  th.c5, td.c5{ width:110px; }
+  th.c6, td.c6{ width:110px; }
+  th.c7, td.c7{ width:90px; }
+  th.c8, td.c8{ width:90px; }
+
+  /* Candidate cell */
+  .cand .name{
+    display:block;
+    font-weight:var(--fwStrong);
+    font-size:12px;
+  }
+  .cand .sub{
+    display:block;
+    margin-top:2px;
+    color:var(--mut);
+    font-weight:400;
+    font-size:11px;
+  }
+
+  /* Inputs like Excel cell */
+  .cell input{
+    width:100%;
+    height:26px;
+    border:1px solid transparent;
+    border-radius:6px;
+    padding:0 8px;
+    background:transparent;
+    outline:none;
+    font-weight:500;
+    font-size:12px;
+    font-variant-numeric: tabular-nums;
+    text-align:center;
+  }
+  .cell input:focus{
+    border-color: rgba(37,99,235,.60);
+    background:#fff;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+  }
+
+  /* totals */
+  .total{
+    font-weight:600;
+    font-size:12px;
+    font-variant-numeric: tabular-nums;
+    text-align:center;
+  }
+  .ok{ color:var(--excel); font-weight:600; }
+  .bad{ color:var(--bad); font-weight:600; }
+
+  .empty{
+    padding:16px;
+    text-align:center;
+    color:var(--mut);
+    font-weight:600;
+  }
+
+  /* ===== Drawer overlay ===== */
+  .overlay{
+    position:fixed;
+    inset:0;
+    background: rgba(0,0,0,.35);
+    display:none;
+    z-index:999;
+  }
+  .overlay.open{ display:block; }
+
+  .drawer{
+    position:fixed;
+    top:0;
+    left:0;
+    height:100vh;
+    width: min(var(--drawerW), 92vw);
+    background:#fff;
+    border-right:1px solid var(--grid);
+    box-shadow: 30px 0 60px rgba(0,0,0,.16);
+    transform: translateX(-110%);
+    transition:.2s ease;
+    z-index:1000;
+    display:flex;
+    flex-direction:column;
+  }
+  .drawer.open{ transform: translateX(0); }
+
+  .dhead{
+    padding:10px;
+    border-bottom:1px solid var(--grid);
+    background: var(--head);
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .dtitle{
+    margin:0;
+    font-size:12px;
+    font-weight:700;
+    color:var(--txt);
+    line-height:1.4;
+  }
+  .dclose{
+    border:1px solid var(--grid);
+    background:#fff;
+    border-radius:8px;
+    padding:6px 10px;
+    font-size:11px;
+    font-weight:700;
+    cursor:pointer;
+  }
+
+  .dbody{
+    padding:10px;
+    overflow:auto;
+  }
+  .card{
+    border:1px solid var(--grid);
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:10px;
+    background:#fff;
+  }
+
+  .kv{
+    display:grid;
+    grid-template-columns: 110px 1fr;
+    gap:6px 10px;
+    font-size:11px;
+  }
+  .kv .k{ color:var(--mut); font-weight:600; }
+  .kv .v{ color:var(--txt); font-weight:600; word-break:break-word; }
+
+  .note{
+    color:var(--mut);
+    font-size:11px;
+    font-weight:600;
+    line-height:1.6;
+  }
+</style>
+
+<div class="sheet">
+  <div class="bar">
+    <div class="hint">أدخل درجة الملف + المقابلة — وسيتم حساب المجموع مباشرة</div>
+
+    <div class="kpis">
+      <span>الإجمالي: <b>{{ stats.total|default:formset.total_form_count }}</b></span>
+      <span>مستوفون: <b>{{ stats.eligible|default:"—" }}</b></span>
+      <span>نواقص: <b>{{ stats.pending|default:"—" }}</b></span>
+    </div>
+
+    <button class="btnx primary" type="button" onclick="document.getElementById('scoresForm').requestSubmit()">حفظ الكل</button>
+  </div>
+
+  <div class="filters">
+    <form method="get">
+      <div class="fgrid">
+        <div class="field">
+          <label>الدفعة</label>
+          <select class="ctrl" name="batch">
+            <option value="">كل الدفعات</option>
+            {% for b in batches %}
+              <option value="{{ b.id }}" {% if filters.batch == b.id|stringformat:"s" %}selected{% endif %}>
+                {{ b.name|default:b }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>المدرسة/الفرصة</label>
+          <select class="ctrl" name="opp">
+            <option value="">كل الفرص</option>
+            {% for o in opps %}
+              <option value="{{ o.id }}" {% if filters.opp == o.id|stringformat:"s" %}selected{% endif %}>
+                {{ o.name|default:o }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>الوظيفة</label>
+          <select class="ctrl" name="role">
+            <option value="">كل الوظائف</option>
+            {% for key,label in formset.queryset.model.ROLE_CHOICES %}
+              <option value="{{ key }}" {% if filters.role == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>عرض</label>
+          <select class="ctrl" name="pending">
+            <option value="">الكل</option>
+            <option value="1" {% if filters.pending == "1" %}selected{% endif %}>فقط النواقص</option>
+          </select>
+        </div>
+
+        <button class="btnx" type="submit">تطبيق</button>
+      </div>
     </form>
   </div>
 
-  <!-- =========================
-       Inputs Table
-       ========================= -->
-  <div class="card">
-    <div class="mut" style="margin-bottom:10px">
-      أدخل (درجة الملف + درجة المقابلة) — المجموع يُحسب تلقائيًا. ثم اضغط <b>حفظ الكل</b>.
-    </div>
-
-    <!-- Quick fill -->
-    <div class="row" style="gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:10px;">
-      <div style="min-width:200px">
-        <div class="mut" style="margin-bottom:6px">تعبئة جماعية (اختياري)</div>
-        <div class="row" style="gap:8px;">
-          <input id="bulkFile" type="text" inputmode="decimal" placeholder="درجة الملف للجميع">
-          <input id="bulkInterview" type="text" inputmode="decimal" placeholder="درجة المقابلة للجميع">
-        </div>
-      </div>
-
-      <div class="row" style="gap:8px;">
-        <button id="bulkApply" class="btn" type="button">تطبيق على الظاهر</button>
-        <button id="bulkClear" class="btn" type="button">تصفير الظاهر</button>
-      </div>
-
-      <div class="mut" id="liveStats" style="margin-inline-start:auto"></div>
-    </div>
-
-    <form method="post">
+  <div class="tablewrap">
+    <form id="scoresForm" method="post">
       {% csrf_token %}
       {{ formset.management_form }}
 
-      <table id="scoresTable">
-        <thead>
-          <tr>
-            <th>المرشح</th>
-            <th>السجل</th>
-            <th>المدرسة</th>
-            <th>الوظيفة</th>
-            <th>درجة الملف</th>
-            <th>درجة المقابلة</th>
-            <th>المجموع</th>
-            <th>الحالة</th>
-          </tr>
-        </thead>
+      <div class="table-viewport">
+        <div class="table-scroll" id="tableScroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="freeze1 c1">المرشح</th>
+                <th class="freeze2 c2">السجل</th>
+                <th class="c3">المدرسة/الفرصة</th>
+                <th class="c4">الوظيفة</th>
+                <th class="c5">درجة الملف</th>
+                <th class="c6">درجة المقابلة</th>
+                <th class="c7">المجموع</th>
+                <th class="c8">الحالة</th>
+              </tr>
+            </thead>
 
-        <tbody>
-          {% for form in formset.forms %}
-            {% with a=form.instance %}
-            <tr data-row>
-              <td>{{ a.candidate.full_name }}</td>
-              <td class="mut">{{ a.candidate.national_id }}</td>
-              <td>{{ a.opportunity.name }}</td>
-              <td><span class="tag">{{ a.applied_role }}</span></td>
+            <tbody id="rowsTbody">
+              {% for form in formset.forms %}
+                {% with a=form.instance %}
+                <tr class="row"
+                  data-name="{{ a.candidate.full_name|default:''|escapejs }}"
+                  data-nid="{{ a.candidate.national_id|default:''|escapejs }}"
+                  data-phone="{{ a.candidate.phone|default:''|escapejs }}"
+                  data-job="{{ a.candidate.current_job|default:''|escapejs }}"
+                  data-appschool="{{ a.candidate.applicant_school|default:''|escapejs }}"
+                  data-appsector="{{ a.candidate.applicant_sector|default:''|escapejs }}"
+                  data-ydir="{{ a.candidate.years_director|default:'0'|escapejs }}"
+                  data-ydep="{{ a.candidate.years_deputy|default:'0'|escapejs }}"
+                  data-opp="{{ a.opportunity.name|default:''|escapejs }}"
+                  data-oppsector="{{ a.opportunity.sector|default:''|escapejs }}"
+                  data-role="{{ a.applied_role|default:''|escapejs }}"
+                  data-filescore="{{ a.file_score|default:'0' }}"
+                  data-interviewscore="{{ a.interview_score|default:'0' }}"
+                  data-total="{{ a.total_score|default:'0' }}"
+                  data-eligible="{% if a.is_eligible %}1{% else %}0{% endif %}"
+                >
+                  <td class="freeze1 c1 cand">
+                    <span class="name">{{ a.candidate.full_name }}</span>
+                    <span class="sub">
+                      {{ a.candidate.national_id }}{% if a.candidate.phone %} — {{ a.candidate.phone }}{% endif %}
+                    </span>
+                  </td>
 
-              <td>
-                {{ form.file_score }}
-              </td>
-              <td>
-                {{ form.interview_score }}
-              </td>
+                  <td class="freeze2 c2" style="color:var(--mut); font-weight:500;">{{ a.candidate.national_id }}</td>
 
-              <!-- live total -->
-              <td><b data-total>{{ a.total_score|default:"0.00" }}</b></td>
+                  <td class="c3" title="{{ a.opportunity.name }}">
+                    <span style="font-weight:600;">{{ a.opportunity.name }}</span>
+                    {% if a.opportunity.sector %}<span style="color:var(--mut); font-weight:400;"> — {{ a.opportunity.sector }}</span>{% endif %}
+                  </td>
 
-              <td>
-                {% if a.is_eligible %}
-                  <span class="ok">مستوفي</span>
-                {% else %}
-                  <span class="bad">غير مستوفي</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endwith %}
-          {% empty %}
-            <tr><td colspan="8" class="mut">لا توجد بيانات</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+                  <td class="c4" style="font-weight:400;">{{ a.applied_role }}</td>
 
-      <div style="margin-top:10px" class="row">
-        <button class="btn primary" type="submit">حفظ الكل</button>
+                  <td class="c5 cell">
+                    {{ form.file_score }}
+                  </td>
+                  <td class="c6 cell">
+                    {{ form.interview_score }}
+                  </td>
+
+                  <td class="c7 total" data-total-cell="1">{{ a.total_score }}</td>
+
+                  <td class="c8">
+                    {% if a.is_eligible %}
+                      <span class="ok" data-elig="1">مستوفي</span>
+                    {% else %}
+                      <span class="bad" data-elig="0">غير مستوفي</span>
+                    {% endif %}
+                  </td>
+
+                  {{ form.id }}
+                </tr>
+                {% endwith %}
+              {% empty %}
+                <tr><td colspan="8" class="empty">لا توجد بيانات.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </form>
   </div>
 </div>
 
+<div class="overlay" id="overlay"></div>
+
+<div class="drawer" id="drawer" aria-live="polite">
+  <div class="dhead">
+    <h3 class="dtitle" id="dTitle">تفاصيل المرشح</h3>
+    <button class="dclose" type="button" id="dClose">إغلاق</button>
+  </div>
+  <div class="dbody">
+    <div class="card">
+      <div class="kv">
+        <div class="k">الاسم</div><div class="v" id="dName">—</div>
+        <div class="k">السجل</div><div class="v" id="dNid">—</div>
+        <div class="k">الجوال</div><div class="v" id="dPhone">—</div>
+        <div class="k">العمل الحالي</div><div class="v" id="dJob">—</div>
+        <div class="k">مدرسة المتقدم</div><div class="v" id="dAppSchool">—</div>
+        <div class="k">قطاع المتقدم</div><div class="v" id="dAppSector">—</div>
+        <div class="k">خبرة مدير</div><div class="v" id="dYDir">—</div>
+        <div class="k">خبرة وكيل</div><div class="v" id="dYDep">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="kv">
+        <div class="k">الفرصة</div><div class="v" id="dOpp">—</div>
+        <div class="k">قطاع الفرصة</div><div class="v" id="dOppSector">—</div>
+        <div class="k">الوظيفة</div><div class="v" id="dRole">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="kv">
+        <div class="k">درجة الملف</div><div class="v" id="dFileScore">—</div>
+        <div class="k">درجة المقابلة</div><div class="v" id="dInterviewScore">—</div>
+        <div class="k">المجموع</div><div class="v" id="dTotal">—</div>
+        <div class="k">الحالة</div><div class="v" id="dEligible">—</div>
+      </div>
+    </div>
+
+    <div class="note">اضغط على أي صف لعرض التفاصيل. (Esc للإغلاق)</div>
+  </div>
+</div>
+
 <script>
-  // =========================
-  // Helpers
-  // =========================
-  function toNum(v){
-    if(v === null || v === undefined) return 0;
-    v = String(v).trim();
-    if(!v) return 0;
+(function(){
+  const tbody = document.getElementById("rowsTbody");
+  const overlay = document.getElementById("overlay");
+  const drawer  = document.getElementById("drawer");
+  const closeBtn= document.getElementById("dClose");
 
-    // Arabic digits -> English
-    const map = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
-    v = v.replace(/[٠-٩]/g, d => map[d]);
+  const setText = (id, v) => {
+    const el = document.getElementById(id);
+    el.textContent = (v && String(v).trim()) ? v : "—";
+  };
 
-    // accept comma
-    v = v.replace(',', '.');
+  function openDrawer(){
+    overlay.classList.add("open");
+    drawer.classList.add("open");
+  }
+  function closeDrawer(){
+    overlay.classList.remove("open");
+    drawer.classList.remove("open");
+  }
 
-    const n = parseFloat(v);
+  function fill(tr){
+    setText("dName", tr.dataset.name);
+    setText("dNid", tr.dataset.nid);
+    setText("dPhone", tr.dataset.phone);
+    setText("dJob", tr.dataset.job);
+    setText("dAppSchool", tr.dataset.appschool);
+    setText("dAppSector", tr.dataset.appsector);
+    setText("dYDir", tr.dataset.ydir);
+    setText("dYDep", tr.dataset.ydep);
+
+    setText("dOpp", tr.dataset.opp);
+    setText("dOppSector", tr.dataset.oppsector);
+    setText("dRole", tr.dataset.role);
+
+    // scores (live)
+    const fs = getRowScore(tr, "file");
+    const is = getRowScore(tr, "interview");
+    const total = (fs + is).toFixed(2);
+    setText("dFileScore", fs.toFixed(2));
+    setText("dInterviewScore", is.toFixed(2));
+    setText("dTotal", total);
+
+    document.getElementById("dTitle").textContent = "تفاصيل: " + (tr.dataset.name || "—");
+  }
+
+  function activate(tr){
+    tbody.querySelectorAll("tr.row.active").forEach(r => r.classList.remove("active"));
+    tr.classList.add("active");
+    fill(tr);
+    openDrawer();
+  }
+
+  // ========= Excel-like: live total + keyboard nav =========
+  function parseNum(v){
+    if (v === null || v === undefined) return 0;
+    const s = String(v).replace(/,/g, ".").trim();
+    const n = parseFloat(s);
     return isNaN(n) ? 0 : n;
   }
 
-  function setInputValue(el, val){
-    if(!el) return;
-    el.value = val;
-    // Trigger input listeners
-    el.dispatchEvent(new Event("input", {bubbles:true}));
+  function getInputs(tr){
+    const inputs = tr.querySelectorAll("td.cell input");
+    // ترتيب: file_score ثم interview_score
+    return { file: inputs[0] || null, interview: inputs[1] || null };
   }
 
-  function getRowInputs(tr){
-    // Django formset default IDs/Names - but we can reliably find both inputs in row
-    const inputs = tr.querySelectorAll("input");
-    // We expect two numeric inputs in this row (file_score + interview_score)
-    let fileInput = null;
-    let interviewInput = null;
-    inputs.forEach(inp => {
-      const name = inp.getAttribute("name") || "";
-      if(name.endsWith("-file_score")) fileInput = inp;
-      if(name.endsWith("-interview_score")) interviewInput = inp;
+  function getRowScore(tr, which){
+    const {file, interview} = getInputs(tr);
+    if (which === "file") return parseNum(file ? file.value : tr.dataset.filescore);
+    return parseNum(interview ? interview.value : tr.dataset.interviewscore);
+  }
+
+  function updateRowTotal(tr){
+    const file = getRowScore(tr, "file");
+    const interview = getRowScore(tr, "interview");
+    const total = file + interview;
+    const cell = tr.querySelector('[data-total-cell="1"]');
+    if (cell) cell.textContent = total ? total.toFixed(2) : "0.00";
+
+    // تحديث drawer إذا الصف نشط
+    if (tr.classList.contains("active")) fill(tr);
+  }
+
+  function focusCell(tr, which){
+    const {file, interview} = getInputs(tr);
+    const el = (which === "file") ? file : interview;
+    if (el){ el.focus(); el.select?.(); }
+  }
+
+  function nextRow(tr){
+    const n = tr.nextElementSibling;
+    return (n && n.classList.contains("row")) ? n : null;
+  }
+  function prevRow(tr){
+    const p = tr.previousElementSibling;
+    return (p && p.classList.contains("row")) ? p : null;
+  }
+
+  function bindInput(tr){
+    const {file, interview} = getInputs(tr);
+    [file, interview].forEach((inp, idx)=>{
+      if (!inp) return;
+
+      // تحسين شكل المدخلات الافتراضي من Django (لو فيه width/attrs)
+      inp.setAttribute("inputmode", "decimal");
+      inp.setAttribute("autocomplete", "off");
+
+      inp.addEventListener("input", ()=>{
+        updateRowTotal(tr);
+        tr.dataset.filescore = file ? file.value : tr.dataset.filescore;
+        tr.dataset.interviewscore = interview ? interview.value : tr.dataset.interviewscore;
+      });
+
+      // Enter: ينزل للسطر التالي بنفس العمود
+      inp.addEventListener("keydown", (e)=>{
+        const key = e.key;
+
+        if (key === "Enter"){
+          e.preventDefault();
+          const nr = nextRow(tr);
+          if (nr){
+            const which = (idx === 0) ? "file" : "interview";
+            focusCell(nr, which);
+          }
+          return;
+        }
+
+        // الأسهم: تنقل مثل إكسل
+        if (key === "ArrowDown"){
+          e.preventDefault();
+          const nr = nextRow(tr);
+          if (nr){
+            const which = (idx === 0) ? "file" : "interview";
+            focusCell(nr, which);
+          }
+          return;
+        }
+        if (key === "ArrowUp"){
+          e.preventDefault();
+          const pr = prevRow(tr);
+          if (pr){
+            const which = (idx === 0) ? "file" : "interview";
+            focusCell(pr, which);
+          }
+          return;
+        }
+        if (key === "ArrowLeft"){
+          // RTL: ArrowLeft عادة يروح "للخانة التالية" بصرياً، نخليه يتنقل بين عمودي الدرجات
+          if (idx === 0){
+            // من file -> interview
+            e.preventDefault();
+            focusCell(tr, "interview");
+          }
+          return;
+        }
+        if (key === "ArrowRight"){
+          if (idx === 1){
+            // من interview -> file
+            e.preventDefault();
+            focusCell(tr, "file");
+          }
+          return;
+        }
+      });
+
+      // منع فتح drawer عند التعامل مع input
+      inp.addEventListener("click", e => e.stopPropagation());
+      inp.addEventListener("focus", e => e.stopPropagation());
     });
-    return {fileInput, interviewInput};
+
+    // total init
+    updateRowTotal(tr);
   }
 
-  function recalcRow(tr){
-    const {fileInput, interviewInput} = getRowInputs(tr);
-    const totalCell = tr.querySelector("[data-total]");
-    if(!fileInput || !interviewInput || !totalCell) return;
+  // bind all rows
+  tbody.querySelectorAll("tr.row").forEach(tr => bindInput(tr));
 
-    const fileVal = toNum(fileInput.value);
-    const interviewVal = toNum(interviewInput.value);
-    const total = fileVal + interviewVal;
-
-    totalCell.textContent = total.toFixed(2);
-
-    // Highlight missing scores
-    const isMissing = (fileVal === 0 || interviewVal === 0);
-    tr.style.opacity = "";
-    tr.classList.toggle("row-missing", isMissing);
-
-    return {fileVal, interviewVal, total, isMissing};
-  }
-
-  function recalcAll(){
-    const rows = document.querySelectorAll("#scoresTable tbody tr[data-row]");
-    let missing = 0, ok = 0;
-    rows.forEach(tr => {
-      const res = recalcRow(tr);
-      if(!res) return;
-      if(res.isMissing) missing++;
-      else ok++;
-    });
-
-    const live = document.getElementById("liveStats");
-    if(live){
-      live.textContent = `الظاهر الآن: ${rows.length} | مكتمل: ${ok} | نواقص: ${missing}`;
-    }
-  }
-
-  // =========================
-  // init
-  // =========================
-  document.querySelectorAll("#scoresTable tbody tr[data-row]").forEach(tr => {
-    tr.addEventListener("input", () => recalcRow(tr));
+  // click row -> drawer (لكن ليس داخل input)
+  tbody.addEventListener("click", function(e){
+    if (e.target && (e.target.tagName === "INPUT" || e.target.closest(".cell"))) return;
+    const tr = e.target.closest("tr.row");
+    if (!tr) return;
+    activate(tr);
   });
 
-  // bulk actions
-  const bulkApply = document.getElementById("bulkApply");
-  const bulkClear = document.getElementById("bulkClear");
-  const bulkFile = document.getElementById("bulkFile");
-  const bulkInterview = document.getElementById("bulkInterview");
+  overlay.addEventListener("click", closeDrawer);
+  closeBtn.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeDrawer(); });
 
-  if(bulkApply){
-    bulkApply.addEventListener("click", () => {
-      const f = bulkFile.value.trim();
-      const i = bulkInterview.value.trim();
-
-      document.querySelectorAll("#scoresTable tbody tr[data-row]").forEach(tr => {
-        const {fileInput, interviewInput} = getRowInputs(tr);
-        if(f !== "") setInputValue(fileInput, f);
-        if(i !== "") setInputValue(interviewInput, i);
-      });
-
-      recalcAll();
-    });
-  }
-
-  if(bulkClear){
-    bulkClear.addEventListener("click", () => {
-      document.querySelectorAll("#scoresTable tbody tr[data-row]").forEach(tr => {
-        const {fileInput, interviewInput} = getRowInputs(tr);
-        setInputValue(fileInput, "0");
-        setInputValue(interviewInput, "0");
-      });
-
-      recalcAll();
-    });
-  }
-
-  // First render
-  recalcAll();
-
-  // small styling for missing rows (uses inline to avoid touching base.css)
-  const style = document.createElement("style");
-  style.innerHTML = `
-    tr.row-missing td { background: rgba(245, 158, 11, 0.08); }
-    tr.row-missing b[data-total] { color: #b45309; }
-    #scoresTable input { width: 110px; }
-  `;
-  document.head.appendChild(style);
+})();
 </script>
 {% endblock %}
